@@ -60,7 +60,7 @@ def main():
     print(f"pwd:{os.getcwd()}")
     print(f"outdir; {outdir}")
     if not os.path.exists(outdir):
-        os.mkdir(outdir)
+        os.mkdir(f"{outdir}")
     outpath = os.path.join(outdir, f'results{args.results_suffix}.csv')
 
     # multiprocessing
