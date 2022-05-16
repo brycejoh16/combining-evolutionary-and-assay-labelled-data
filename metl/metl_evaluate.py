@@ -1,0 +1,196 @@
+import os
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import metl_predictors as mtlp
+import numpy as np
+
+
+def unit_test_on_predict_unsupervised():
+    filepath = os.path.join('..', 'data', 'BLAT_ECOLX_Ranganathan2015-2500', 'data.csv')
+    df = pd.read_csv(filepath)
+    ev = mtlp.EVPredictor('BLAT_ECOLX_Ranganathan2015-2500')
+    df=df[:5].copy()
+    df['seq']=df['seq'].apply(lambda x:x.lower())
+    print(ev.predict_unsupervised(df.seq.values))
+
+    ### so I guess this is failing which is good.
+    ### when I set ignore_gaps to true it works which makes sense.
+
+
+
+
+def unit_test_for_nan_values(dataset_name):
+    # first thing we need to do is load the data
+    filepath = os.path.join('..', 'data', dataset_name, 'data.csv')
+    data=pd.read_csv(filepath)[:10]
+    ev=mtlp.EVPredictor(dataset_name)
+    # test = data.sample(frac=0.2, random_state=0)
+    # test = test.copy()
+    # train = data.drop(test.index)
+    predictions= ev.predict_unsupervised(data.seq.values)
+    data['pred']=predictions
+    my_spearman= mtlp.spearman(data.pred.values, data.log_fitness.values)
+    ### so that solves the mystery, if its zero then it doesn't throw an error it just returns zero,
+    #### it says the gaps here are two much so I'm not going to predict at all.
+    ## I don't want to do a hard replace that would be gross.
+    print(f'num data points {len(data)}, protein : {dataset_name}  , spearman: {my_spearman}')
+
+def parity_plot_40_vs_30_gb1():
+    pred_30=main('gb1_double_single_30')
+    pred_40=main('gb1_double_single_40')
+
+    plt.scatter(pred_30,pred_40,s=.1)
+    plt.xlabel('pred_30')
+    plt.ylabel('pred_40')
+    plt.title('pred_40 vs pred_30')
+    plt.show()
+    # in the futre
+
+def save_bitscore_models(dataset_name):
+    filepath = os.path.join('..', 'data', dataset_name, 'data.csv')
+    ev = mtlp.EVPredictor(dataset_name)
+    data = pd.read_csv(filepath)
+    predictions = ev.predict_unsupervised(data.seq.values)
+    data['pred'] = predictions
+    data.to_csv(f'models/{dataset_name}_scores.csv')
+
+
+def parity_plot_gelman_run_vs_chloe_run():
+    pass
+    # my_spearman = mtlp.spearman(data.pred.values, data.log_fitness.values)
+
+    ### so that solves the mystery, if its zero then it doesn't throw an error it just returns zero,
+    #### it says the gaps here are two much so I'm not going to predict at all.
+    ## I don't want to do a hard replace that would be gross.
+    # print(f'num data points {len(data)}, protein : {dataset_name}  , spearman: {my_spearman}')
+
+def main(dataset_name):
+
+    # first thing we need to do is load the data
+    filepath = os.path.join('..', 'data', dataset_name, 'data.csv')
+    data=pd.read_csv(filepath)
+    ev=mtlp.EVPredictor(dataset_name)
+    # test = data.sample(frac=0.2, random_state=0)
+    # test = test.copy()
+    # train = data.drop(test.index)
+    predictions= ev.predict_unsupervised(data.seq.values)
+    data['pred']=predictions
+
+    # todo : make unit test here for where the allowed values are.
+    my_spearman= mtlp.spearman(data.pred.values, data.log_fitness.values)
+
+    print(f'num data points {len(data)}, protein : {dataset_name}  , spearman: { my_spearman}')
+    return predictions
+
+
+def parity_plot_filter_out_chloes_model():
+    '''
+    parity plots to compare new EVMutation run to sam's old run... some evaluations for meeting with tony...
+    :return:
+    '''
+
+    dataset='gb1_double_single_30_scores'
+    assert 'gb1_double_single' in dataset , 'this code only works for gb1 for now'
+    outdir = os.path.join('results',dataset)
+    # outdir=outdir.replace('-','_')
+    # print(f"pwd:{os.getcwd()}")
+    # print(f"outdir; {outdir}")
+    if not os.path.exists(outdir):
+        os.mkdir(f"{outdir}")
+
+
+
+    df1=pd.read_csv(f'models/{dataset}.csv').set_index('mutant')
+    df2=pd.read_csv('models/gb1_unsupervised.tsv',sep='\t').set_index('variant')
+    assert (df1.index==df2.index).all(),'why are indexs different'
+
+    df1_no_zeros=df1[df1['pred']!=0].copy()
+    assert len(df1_no_zeros)==(df1['pred']!=0).sum()
+    # if len(df1_new)<len(df1):
+    print(f"========================================\n"
+          f"len of new df {len(df1_no_zeros)} compared to before : {len(df1)}\n")
+
+    # true correlation
+    filtered_zeros_corr=mtlp.spearman(df1_no_zeros['log_fitness'],df1_no_zeros['pred'])
+    print(f'spearman correlation for DMS and chloes (with no zeros)\n for dataset {dataset} : {filtered_zeros_corr:0.3f}')
+
+    df2['pred']=df1_no_zeros['pred']
+    y1 = 'predictions_evmutation_independent'
+    y2 = 'predictions_evmutation_epistatic'
+    assert len(df2['pred'])==len(df2[y1]), ' these columns should be the same length.'
+    df2['log_fitness']=df1['log_fitness']
+    assert len(df2['pred']) == len(df2['log_fitness']), ' these columns should be the same length.'
+
+    # filtering out all
+    assert (np.isnan(df2['predictions_evmutation_independent']) == np.isnan(
+        df2['predictions_evmutation_epistatic'])).all(), \
+        'im making this assumption so if its not true we have a problem'
+
+    # filtering out the dataset to only include non-nan values
+    df2_filtered = df2[~np.isnan(df2[y1]) & ~np.isnan(df2[y2])
+                       & ~np.isnan(df2['pred'])].copy()
+    print(f"found {len(df2_filtered)} sequences out of {len(df2)} sequences\n")
+
+    assert (np.isnan(df2_filtered)).sum().sum()==0, 'why are their nans in here'
+
+    # making spearman correlations here.
+    spearman_dict={}
+    for y in [y1,y2,'pred']:
+        s=mtlp.spearman(df2_filtered[y], df2_filtered['log_fitness'])
+        print(f'spearman correlation for {y} vs log_fitness : {s}')
+        spearman_dict[y]=[s]
+        if y == 'pred':
+            spearman_dict[y].append(filtered_zeros_corr)
+        else:
+            spearman_dict[y].append(np.nan)
+
+    assert len(spearman_dict)==3 , 'you are hard coding above for a specific case, if you want to change this change above'
+
+
+    fig, ax = plt.subplots(1, 1)
+    ax=pd.DataFrame(spearman_dict,index=[len(df2_filtered),len(df1_no_zeros)]).T.plot.bar(ax=ax,alpha=0.3,rot=30)
+    ax.set_title('spearman correlation\n after removing chloe and sam nan points')
+    ax.set_ylabel('spearman')
+
+    fig.savefig(os.path.join(outdir,"spearman.png"))
+
+
+    assert (df2['pred']!=0).all(),'why are values equal to zero '
+
+    # df2[(nndf2['pred'])]
+    fig,(ax1,ax2)=plt.subplots(1,2,figsize=(12,6))
+    nb_nan_indep,nb_nan_epi,nb_tot=(np.isnan(df2[y1]).sum(),np.isnan(df2[y2]).sum(),len(df2))
+    chloeNans = np.isnan(df2["pred"]).sum()
+
+
+    ax1.set_title(f'sams model found {nb_nan_indep} \n invalid seqs ({nb_nan_indep/nb_tot:0.2f})')
+    ax2.set_title(f'sams model found {nb_nan_epi} invalid seqs ({nb_nan_epi/nb_tot:0.2f})')
+
+
+    fig.suptitle(f'parity plots for {dataset} ,'
+                 f'Total datapoints:  {nb_tot} \n '
+                 f'total nans in chloes dataset: {chloeNans} ({chloeNans / nb_tot:0.2f})\n'
+                 f'total data points for plot {len(df2_filtered)}({len(df2_filtered)/nb_tot:0.2f})')
+    ax1 = df2_filtered.plot.scatter(x='pred', y=y1, ax=ax1, s=.03,alpha=0.05)
+    ax2 = df2_filtered.plot.scatter(x='pred', y=y2, ax=ax2, s=.03,alpha=0.05)
+    plt.gcf().subplots_adjust(top=.8)
+    fig.savefig(os.path.join(outdir,f"filter_parity_plot_{len(df2_filtered)}_tot_seqs.png"))
+
+
+
+if __name__ == '__main__':
+    parity_plot_filter_out_chloes_model()
+    # dataset_name='BLAT_ECOLX_Ranganathan2015-2500'
+    # dataset_name='gb1_double_single_30'
+    # main(dataset_name)
+    # unit_test_for_nan_values(dataset_name)
+    # parity_plot_40_vs_30_gb1()
+
+    # save_bitscore_models('gb1_double_single_30')
+    # save_bitscore_models('gb1_double_single_40')
+
+
+
+    # unit_test_on_predict_unsupervised()
+
