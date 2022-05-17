@@ -65,8 +65,79 @@ def parity_plot_gelman_run_vs_chloe_run():
     ## I don't want to do a hard replace that would be gross.
     # print(f'num data points {len(data)}, protein : {dataset_name}  , spearman: {my_spearman}')
 
-def main(dataset_name):
 
+def metl_learning_curve(data,point_eval):
+    pass
+
+def learning_curve(train,test,point_eval,x):
+    y=[]
+    for nb_train in x:
+        y.append(point_eval(dataset_name,train.sample(n=nb_train),test))
+    return y
+
+
+def random_full_learning_curve(dataset_name,):
+    outdir = os.path.join('results', dataset_name)
+    if not os.path.exists(outdir):
+        os.mkdir(f"{outdir}")
+    filepath = os.path.join('..', 'data', dataset_name, 'data.csv')
+    data = pd.read_csv(filepath)
+    test = data.sample(frac=0.2, random_state=0)
+    test = test.copy()
+    train = data.drop(test.index)
+    assert len(train) > len(test)
+
+    x = np.arange(48, 240 + 48, 48)
+    for point_eval in [one_hot_single_data_point,joint_ev_onehot_single_data_point]:
+        y=learning_curve(train,test,point_eval,x)
+        plt.scatter(x, y,label=point_eval.__name__)
+
+    ev = mtlp.EVPredictor(dataset_name)
+    predictions = ev.predict_unsupervised(data.seq.values)
+    plt.axhline(mtlp.spearman(predictions,data.log_fitness.values),label='ev_unsupervised')
+    plt.legend()
+    plt.title(f'spearman correlation vs nb of training points\n for {dataset_name}')
+    plt.xlabel('nb of training points')
+    plt.ylabel('spearman correlation')
+    plt.savefig(os.path.join(outdir, f'random_learning_curve.png'))
+
+def one_hot_single_data_point(dataset_name,train,test):
+    onehot=mtlp.OnehotRidgePredictor(dataset_name=dataset_name)
+    onehot.train(train.seq.values, train.log_fitness.values)
+    predicted=onehot.predict(test.seq.values)
+    return mtlp.spearman(predicted,test.log_fitness.values)
+
+def joint_ev_onehot_single_data_point(dataset_name, train, test):
+    predictor = mtlp.JointPredictor(dataset_name=dataset_name,predictor_classes=[mtlp.EVPredictor,mtlp.OnehotRidgePredictor])
+    predictor.train(train.seq.values, train.log_fitness.values)
+    predicted = predictor.predict(test.seq.values)
+    return mtlp.spearman(predicted, test.log_fitness.values)
+
+
+def add_columns_unsupervised():
+    path = os.path.join('models', f"gb1_unsupervised.tsv")
+    metl_data = pd.read_csv(path, sep='\t').set_index('variant')
+    augmented_data=pd.read_csv(os.path.join('models','gb1_double_single_40_scores.csv')).set_index('mutant')
+    metl_data['evmutation_epistatis_MSA_40']=augmented_data['pred']
+    metl_data['seq']=augmented_data['seq']
+    assert metl_data['seq'].isna().sum()==0\
+           and len(metl_data['seq'])==len(augmented_data['seq'])
+
+
+
+    metl_data.to_csv(os.path.join('models','gb1_pretrained_features.csv'))
+
+    # augmented_data
+#
+
+
+
+
+
+
+
+
+def ev_predictor(dataset_name):
     # first thing we need to do is load the data
     filepath = os.path.join('..', 'data', dataset_name, 'data.csv')
     data=pd.read_csv(filepath)
@@ -81,7 +152,7 @@ def main(dataset_name):
     my_spearman= mtlp.spearman(data.pred.values, data.log_fitness.values)
 
     print(f'num data points {len(data)}, protein : {dataset_name}  , spearman: { my_spearman}')
-    return predictions
+    return my_spearman, predictions
 
 
 def parity_plot_filter_out_chloes_model():
@@ -139,6 +210,9 @@ def parity_plot_filter_out_chloes_model():
     for y in [y1,y2,'pred']:
         s=mtlp.spearman(df2_filtered[y], df2_filtered['log_fitness'])
         print(f'spearman correlation for {y} vs log_fitness : {s}')
+        if y.startswith('predictions_evmutation_'):
+            y=y[len('predictions_evmutation_'):]
+
         spearman_dict[y]=[s]
         if y == 'pred':
             spearman_dict[y].append(filtered_zeros_corr)
@@ -149,11 +223,11 @@ def parity_plot_filter_out_chloes_model():
 
 
     fig, ax = plt.subplots(1, 1)
-    ax=pd.DataFrame(spearman_dict,index=[len(df2_filtered),len(df1_no_zeros)]).T.plot.bar(ax=ax,alpha=0.3,rot=30)
+    ax=pd.DataFrame(spearman_dict,index=[len(df2_filtered),len(df1_no_zeros)]).T.plot.bar(ax=ax,alpha=0.3,rot=0)
     ax.set_title('spearman correlation\n after removing chloe and sam nan points')
     ax.set_ylabel('spearman')
 
-    fig.savefig(os.path.join(outdir,"spearman.png"))
+    fig.savefig(os.path.join(outdir,"spearman_evmutation.png"))
 
 
     assert (df2['pred']!=0).all(),'why are values equal to zero '
@@ -177,11 +251,15 @@ def parity_plot_filter_out_chloes_model():
     plt.gcf().subplots_adjust(top=.8)
     fig.savefig(os.path.join(outdir,f"filter_parity_plot_{len(df2_filtered)}_tot_seqs.png"))
 
-
-
 if __name__ == '__main__':
-    parity_plot_filter_out_chloes_model()
+    # parity_plot_filter_out_chloes_model()
+
     # dataset_name='BLAT_ECOLX_Ranganathan2015-2500'
+    # random_full_learning_curve(dataset_name)
+
+
+    add_columns_unsupervised()
+    # unit_test_learning_curve_random_splits(dataset_name,joint_ev_onehot_single_data_point)
     # dataset_name='gb1_double_single_30'
     # main(dataset_name)
     # unit_test_for_nan_values(dataset_name)
