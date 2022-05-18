@@ -9,8 +9,8 @@ from scipy.stats import spearmanr
 from metl_couplings_model import CouplingsModel
 from Bio import SeqIO
 
-REG_COEF_LIST = [1e-1, 1e0, 1e1, 1e2, 1e3]
-
+# REG_COEF_LIST = [1e-1, 1e0, 1e1, 1e2, 1e3]
+REG_COEF_LIST = [ 1e0]
 def spearman(y_pred, y_true):
     if np.var(y_pred) < 1e-6 or np.var(y_true) < 1e-6:
         return 0.0
@@ -124,17 +124,20 @@ class BaseRegressionPredictor(BasePredictor):
 
 class PretrainedFeature(BaseRegressionPredictor):
     # todo: where i left off on may 17, 2022
-    def __init__(self, dataset_name, feature, reg_coef, **kwargs):
+    def __init__(self, dataset_name,df,feature, reg_coef=1, **kwargs):
         super().__init__(dataset_name, reg_coef, **kwargs)
-        path=os.path.join('models',f"{dataset_name}_pretrained_features.csv")
-        data=pd.read_csv(path).set_index('seq')
-        self.feature_of_interest=data[feature]
+        self.feature_of_interest=df[feature]
         self.reg_coef=reg_coef
     def seq2feat(self, seqs):
         # filter based off what sequences are their and return.
         # return format  [n x 1]
-#       self.feature_of_interest[seqs].to_numpy()[:,None]
-        pass
+        feat=self.feature_of_interest[seqs]
+        assert (feat.index.to_numpy()==seqs).all(),'it looks like the odering changed?'
+        feat_numpy=feat.to_numpy()[:,None]
+        assert (~np.isnan(feat_numpy)).all(),' their shouldnt be any nans'
+        assert feat_numpy.shape[1]==1 ,'the shape of feat_numpy should be n x 1'
+        return feat_numpy
+
 
 
 class JointPredictor(BaseRegressionPredictor):
@@ -182,7 +185,6 @@ class EVPredictor(BaseRegressionPredictor):
         '''
         super(EVPredictor, self).__init__(dataset_name, reg_coef=reg_coef,
                 **kwargs)
-        self.pretrained_data=pretrained_data
         self.ignore_gaps = ignore_gaps
         self.couplings_model_path = os.path.join('..','inference', dataset_name,
                 'plmc', model_name + '.model_params')
@@ -217,7 +219,7 @@ class OnehotRidgePredictor(BaseRegressionPredictor):
 
     def __init__(self, dataset_name, reg_coef=1.0, **kwargs):
 
-        print(f'one hot predictor {dataset_name},reg_coef: {reg_coef},kwargs: {kwargs}')
+        print(f'one hot predictor {dataset_name},reg_coef: {reg_coef}')
         super(OnehotRidgePredictor, self).__init__(
                 dataset_name, reg_coef, Ridge, **kwargs)
 

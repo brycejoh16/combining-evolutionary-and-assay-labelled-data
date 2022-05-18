@@ -16,10 +16,6 @@ def unit_test_on_predict_unsupervised():
 
     ### so I guess this is failing which is good.
     ### when I set ignore_gaps to true it works which makes sense.
-
-
-
-
 def unit_test_for_nan_values(dataset_name):
     # first thing we need to do is load the data
     filepath = os.path.join('..', 'data', dataset_name, 'data.csv')
@@ -36,16 +32,6 @@ def unit_test_for_nan_values(dataset_name):
     ## I don't want to do a hard replace that would be gross.
     print(f'num data points {len(data)}, protein : {dataset_name}  , spearman: {my_spearman}')
 
-def parity_plot_40_vs_30_gb1():
-    pred_30=main('gb1_double_single_30')
-    pred_40=main('gb1_double_single_40')
-
-    plt.scatter(pred_30,pred_40,s=.1)
-    plt.xlabel('pred_30')
-    plt.ylabel('pred_40')
-    plt.title('pred_40 vs pred_30')
-    plt.show()
-    # in the futre
 
 def save_bitscore_models(dataset_name):
     filepath = os.path.join('..', 'data', dataset_name, 'data.csv')
@@ -69,46 +55,97 @@ def parity_plot_gelman_run_vs_chloe_run():
 def metl_learning_curve(data,point_eval):
     pass
 
-def learning_curve(train,test,point_eval,x):
+def learning_curve(dataset_name,train,test,point_eval,x,df):
     y=[]
     for nb_train in x:
-        y.append(point_eval(dataset_name,train.sample(n=nb_train),test))
+        print(f'nb_train {nb_train} , {point_eval.__name__}')
+        y.append(point_eval(dataset_name,train.sample(n=nb_train),test,df=df))
+    print('leaving learning curve')
     return y
 
-
-def random_full_learning_curve(dataset_name,):
-    outdir = os.path.join('results', dataset_name)
-    if not os.path.exists(outdir):
-        os.mkdir(f"{outdir}")
+def random_get_train_test(dataset_name,frac=0.2):
     filepath = os.path.join('..', 'data', dataset_name, 'data.csv')
     data = pd.read_csv(filepath)
-    test = data.sample(frac=0.2, random_state=0)
+    test = data.sample(frac=frac, random_state=0)
     test = test.copy()
     train = data.drop(test.index)
     assert len(train) > len(test)
+    return train,test,data
+def random_full_learning_curve(dataset_name):
+    outdir = os.path.join('results', dataset_name)
+    if not os.path.exists(outdir):
+        os.mkdir(f"{outdir}")
+
+    path = os.path.join('models', f"gb1_pretrained_features.csv")
+    df = pd.read_csv(path).set_index('seq')
+
+
+    funcs2include=[one_hot_single_data_point,joint_pretrained_ev_onehot_single_data_point,
+                       joint_pretrained_rosetta_onehot_single_data_point]
+    train,test,data=random_get_train_test(dataset_name)
+
+    # df.loc[test.set_index('seq')]['evmutation_epistatis_MSA_40']
+    for unsup in ['predictions_rosetta','evmutation_epistatis_MSA_40']:
+        unsup_scores=df.loc[test.set_index('seq').index][unsup]
+        assert (unsup_scores.index == test.set_index('seq').index).all(), 'these indexes must be the same'
+        spearman_unsup= mtlp.spearman( unsup_scores,test.log_fitness.values)
+        plt.axhline(spearman_unsup, label=unsup)
+
 
     x = np.arange(48, 240 + 48, 48)
-    for point_eval in [one_hot_single_data_point,joint_ev_onehot_single_data_point]:
-        y=learning_curve(train,test,point_eval,x)
+    for point_eval in funcs2include:
+        y=learning_curve(dataset_name,train,test,point_eval,x,df=df)
         plt.scatter(x, y,label=point_eval.__name__)
 
-    ev = mtlp.EVPredictor(dataset_name)
-    predictions = ev.predict_unsupervised(data.seq.values)
-    plt.axhline(mtlp.spearman(predictions,data.log_fitness.values),label='ev_unsupervised')
+
+
+    # ev = mtlp.EVPredictor(dataset_name)
+    # predictions = ev.predict_unsupervised(data.seq.values)
+    # plt.axhline(mtlp.spearman(predictions,data.log_fitness.values),label='ev_unsupervised')
     plt.legend()
     plt.title(f'spearman correlation vs nb of training points\n for {dataset_name}')
     plt.xlabel('nb of training points')
     plt.ylabel('spearman correlation')
     plt.savefig(os.path.join(outdir, f'random_learning_curve.png'))
 
-def one_hot_single_data_point(dataset_name,train,test):
+def one_hot_single_data_point(dataset_name,train,test,**kwargs):
     onehot=mtlp.OnehotRidgePredictor(dataset_name=dataset_name)
     onehot.train(train.seq.values, train.log_fitness.values)
     predicted=onehot.predict(test.seq.values)
     return mtlp.spearman(predicted,test.log_fitness.values)
 
 def joint_ev_onehot_single_data_point(dataset_name, train, test):
-    predictor = mtlp.JointPredictor(dataset_name=dataset_name,predictor_classes=[mtlp.EVPredictor,mtlp.OnehotRidgePredictor])
+    return joint_predictor_dp(dataset_name,[mtlp.EVPredictor,mtlp.OnehotRidgePredictor],train,test)
+
+def joint_pretrained_ev_onehot_single_data_point(dataset_name,train, test,**kwargs):
+    assert 'df' in kwargs.keys() , 'need to pass in df to use this function'
+    return joint_predictor_dp(dataset_name, [mtlp.PretrainedFeature, mtlp.OnehotRidgePredictor],
+                       train=train, test=test,df=kwargs['df'],feature='evmutation_epistatis_MSA_40')
+
+def joint_pretrained_rosetta_onehot_single_data_point(dataset_name,train, test,**kwargs):
+    assert 'df' in kwargs.keys() , 'need to pass in df to use this function'
+    return joint_predictor_dp(dataset_name, [mtlp.PretrainedFeature, mtlp.OnehotRidgePredictor],
+                       train=train, test=test,df=kwargs['df'],feature='predictions_rosetta')
+
+
+def unit_test_pretrained_model_data_point(dataset_name):
+    path = os.path.join('models', f"gb1_pretrained_features.csv")
+    df=pd.read_csv(path).set_index('seq')
+    train,test,data=random_get_train_test(dataset_name)
+    spearman=pretrained_model_data_point(dataset_name,train,test,df,'evmutation_epistatis_MSA_40')
+    print(f'spearman for evmutation_epistatis_MSA_40 with {len(train)} training (random) is '
+          f'{spearman}')
+
+def joint_predictor_dp(dataset_name,predictor_classes,train,test,**kwargs):
+    predictor = mtlp.JointPredictor(dataset_name=dataset_name,
+                                    predictor_classes=predictor_classes,**kwargs)
+    predictor.train(train.seq.values, train.log_fitness.values)
+    predicted = predictor.predict(test.seq.values)
+    return mtlp.spearman(predicted, test.log_fitness.values)
+
+
+def pretrained_model_data_point(dataset_name,train,test,df,feature):
+    predictor = mtlp.PretrainedFeature(dataset_name=dataset_name,df=df,feature=feature)
     predictor.train(train.seq.values, train.log_fitness.values)
     predicted = predictor.predict(test.seq.values)
     return mtlp.spearman(predicted, test.log_fitness.values)
@@ -128,14 +165,6 @@ def add_columns_unsupervised():
     metl_data.to_csv(os.path.join('models','gb1_pretrained_features.csv'))
 
     # augmented_data
-#
-
-
-
-
-
-
-
 
 def ev_predictor(dataset_name):
     # first thing we need to do is load the data
@@ -153,7 +182,6 @@ def ev_predictor(dataset_name):
 
     print(f'num data points {len(data)}, protein : {dataset_name}  , spearman: { my_spearman}')
     return my_spearman, predictions
-
 
 def parity_plot_filter_out_chloes_model():
     '''
@@ -257,8 +285,9 @@ if __name__ == '__main__':
     # dataset_name='BLAT_ECOLX_Ranganathan2015-2500'
     # random_full_learning_curve(dataset_name)
 
-
-    add_columns_unsupervised()
+    # unit_test_pretrained_model_data_point()
+    random_full_learning_curve('gb1_double_single_40')
+    # add_columns_unsupervised()
     # unit_test_learning_curve_random_splits(dataset_name,joint_ev_onehot_single_data_point)
     # dataset_name='gb1_double_single_30'
     # main(dataset_name)
