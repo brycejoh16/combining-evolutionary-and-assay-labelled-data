@@ -9,8 +9,8 @@ from scipy.stats import spearmanr
 from metl_couplings_model import CouplingsModel
 from Bio import SeqIO
 
-# REG_COEF_LIST = [1e-1, 1e0, 1e1, 1e2, 1e3]
-REG_COEF_LIST = [ 1e0]
+REG_COEF_LIST = [1e-1, 1e0, 1e1, 1e2, 1e3]
+# REG_COEF_LIST = [ 1e0]
 def spearman(y_pred, y_true):
     if np.var(y_pred) < 1e-6 or np.var(y_true) < 1e-6:
         return 0.0
@@ -102,6 +102,7 @@ class BaseRegressionPredictor(BasePredictor):
         X = self.seq2feat(train_seqs)
         if self.reg_coef is None or self.reg_coef == 'CV':
             best_rc, best_score = None, -np.inf
+            print('doing CV on ridge')
             for rc in REG_COEF_LIST:
                 model = self.linear_model_cls(alpha=rc)
                 score = cross_val_score(
