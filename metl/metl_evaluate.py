@@ -17,7 +17,6 @@ def unit_test_on_predict_unsupervised():
     ### so I guess this is failing which is good.
     ### when I set ignore_gaps to true it works which makes sense.
 
-
 def unit_test_for_nan_values(dataset_name):
     # first thing we need to do is load the data
     filepath = os.path.join('..', 'data', dataset_name, 'data.csv')
@@ -44,16 +43,6 @@ def save_bitscore_models(dataset_name):
     data.to_csv(f'models/{dataset_name}_scores.csv')
 
 
-def parity_plot_gelman_run_vs_chloe_run():
-    pass
-    # my_spearman = mtlp.spearman(data.pred.values, data.log_fitness.values)
-
-    ### so that solves the mystery, if its zero then it doesn't throw an error it just returns zero,
-    #### it says the gaps here are two much so I'm not going to predict at all.
-    ## I don't want to do a hard replace that would be gross.
-    # print(f'num data points {len(data)}, protein : {dataset_name}  , spearman: {my_spearman}')
-
-
 def metl_learning_curve(data, point_eval):
     pass
 
@@ -63,19 +52,24 @@ def learning_curve(dataset_name, train, test, point_eval, x, df):
     y = []
     for nb_train in x:
         print(f'nb_train {nb_train} , {point_eval.__name__}')
-        y.append(point_eval(dataset_name, train.sample(n=nb_train), test, df=df))
+        spearman=point_eval(dataset_name, train.sample(n=nb_train), test, df=df)
+        y.append(spearman)
+        print(f'spearman {spearman:0.2f}')
+
     print('leaving learning curve')
     return y
 
 
-def random_get_train_test(dataset_name, frac=0.2):
+def random_get_train_test(dataset_name, frac=0.2,random_state=0):
     filepath = os.path.join('..', 'data', dataset_name, 'data.csv')
     data = pd.read_csv(filepath)
-    test = data.sample(frac=frac, random_state=0)  # so im hard coding my test state,
+    test = data.sample(frac=frac,random_state=random_state)  # so im hard coding my test state,
     # but not my split on which points to sample from.
     test = test.copy()
     train = data.drop(test.index)
     assert len(train) > len(test)
+
+    print(f'train length  {len(train)}, ')
     return train, test, data
 
 
@@ -99,7 +93,7 @@ def random_full_learning_curve(dataset_name):
         spearman_unsup = mtlp.spearman(unsup_scores, test.log_fitness.values)
         plt.axhline(spearman_unsup, label=unsup)
 
-    x = np.arange(48, 240 + 48, 48)
+    x = np.arange(10, 210 + 50, 50)
     nb_of_seeds = 5
     for point_eval in funcs2include:
         Y = []
@@ -292,23 +286,6 @@ def parity_plot_filter_out_chloes_model():
     plt.gcf().subplots_adjust(top=.8)
     fig.savefig(os.path.join(outdir, f"filter_parity_plot_{len(df2_filtered)}_tot_seqs.png"))
 
-
 if __name__ == '__main__':
-    # parity_plot_filter_out_chloes_model()
-
-    # dataset_name='BLAT_ECOLX_Ranganathan2015-2500'
-    # random_full_learning_curve(dataset_name)
-
-    # unit_test_pretrained_model_data_point()
     random_full_learning_curve('gb1_double_single_40')
-    # add_columns_unsupervised()
-    # unit_test_learning_curve_random_splits(dataset_name,joint_ev_onehot_single_data_point)
-    # dataset_name='gb1_double_single_30'
-    # main(dataset_name)
-    # unit_test_for_nan_values(dataset_name)
-    # parity_plot_40_vs_30_gb1()
 
-    # save_bitscore_models('gb1_double_single_30')
-    # save_bitscore_models('gb1_double_single_40')
-
-    # unit_test_on_predict_unsupervised()

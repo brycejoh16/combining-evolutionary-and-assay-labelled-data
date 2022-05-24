@@ -86,7 +86,6 @@ class BasePredictor():
         return np.random.randn(len(predict_seqs))
 
 class BaseRegressionPredictor(BasePredictor):
-
     def __init__(self, dataset_name, reg_coef=None, linear_model_cls=Ridge, **kwargs):
         # self.dataset_name = dataset_name
         self.reg_coef = reg_coef
@@ -124,7 +123,6 @@ class BaseRegressionPredictor(BasePredictor):
         return self.model.predict(X)
 
 class PretrainedFeature(BaseRegressionPredictor):
-    # todo: where i left off on may 17, 2022
     def __init__(self, dataset_name,df,feature, reg_coef=1, **kwargs):
         super().__init__(dataset_name, reg_coef, **kwargs)
         self.feature_of_interest=df[feature]
@@ -277,7 +275,8 @@ aa_to_int = {
     'S':7,
     'T':8,
     'N':9,
-    'Q':10, 'C':11,
+    'Q':10,
+    'C':11,
     'U':12,
     'G':13,
     'P':14,
