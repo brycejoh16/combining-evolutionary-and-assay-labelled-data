@@ -1,11 +1,12 @@
 import os
-
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 import pandas as pd
 import metl_predictors as mtlp
 import numpy as np
+from sklearn.linear_model import LinearRegression, Ridge
 
-
+METL_SPLIT_DIRECTORY=os.path.join('..','RosettaTL','data','dms_data','gb1','splits','dev')
 def unit_test_on_predict_unsupervised():
     filepath = os.path.join('..', 'data', 'BLAT_ECOLX_Ranganathan2015-2500', 'data.csv')
     df = pd.read_csv(filepath)
@@ -43,8 +44,71 @@ def save_bitscore_models(dataset_name):
     data.to_csv(f'models/{dataset_name}_scores.csv')
 
 
-def metl_learning_curve(data, point_eval):
-    pass
+def metl_learning_curve(dataset_name,data,split_name, point_eval,df):
+    assert split_name=='reduced_s3' or split_name=='reduced_s2','s1 doesnt work b/c of tune data'
+    split_dir=os.path.join(METL_SPLIT_DIRECTORY,split_name)
+    Y,Yerr,X=[],[],[]
+    for split in tqdm(os.listdir(split_dir)):
+        assert 'tu0' in split and 'te0.1' in split, 'must have 0 tune data'
+        single_split_dir=os.path.join(split_dir,split)
+        y,x=[],[]
+        for s in os.listdir(single_split_dir):
+            filename=os.path.join(single_split_dir,s)
+            train_idx=np.loadtxt(os.path.join(filename,'train.txt'),dtype=int)
+            test_idx= np.loadtxt(os.path.join(filename,'test.txt'),dtype=int)
+            train=data.loc[train_idx].copy()
+            test=data.loc[test_idx].copy()
+            assert (train.index==train_idx).all() and (test.index==test_idx).all()
+            spearman=point_eval(dataset_name,train,test,df=df)
+            y.append(spearman)
+            x.append(len(train))
+        Y.append(np.array(y).mean())
+        Yerr.append(np.array(y).std())
+        assert (np.array(x)==len(train)).all()
+        X.append(x[0])
+    return X,Y,Yerr
+
+def metl_make_learning_curve():
+
+    dataset_name='gb1_double_single_40'
+    outdir = os.path.join('results', dataset_name,'metl')
+    if not os.path.exists(outdir):
+        os.mkdir(f"{outdir}")
+    split_name='reduced_s3'
+    filepath = os.path.join('..', 'data', dataset_name, 'data.csv')
+    data = pd.read_csv(filepath)
+
+
+    funcs2include = [one_hot_single_data_point, joint_pretrained_ev_onehot_single_data_point,
+                     joint_pretrained_rosetta_onehot_single_data_point]
+    path = os.path.join('models', f"gb1_pretrained_features.csv")
+    df = pd.read_csv(path).set_index('seq')
+
+    # todo: add the unsupervised
+    # for unsup in ['predictions_rosetta', 'evmutation_epistatis_MSA_40']:
+    #     unsup_scores = df.loc[test.set_index('seq').index][unsup]
+    #     assert (unsup_scores.index == test.set_index('seq').index).all(), 'these indexes must be the same'
+    #     spearman_unsup = mtlp.spearman(unsup_scores, test.log_fitness.values)
+    #     plt.axhline(spearman_unsup, label=unsup)
+
+
+    fig, ax=plt.subplots(1,1)
+    for point_eval in funcs2include:
+        print(f'doing function {point_eval.__name__}')
+        X,Y,Yerr=metl_learning_curve(dataset_name,data,split_name,point_eval,df=df)
+        ax.errorbar(X, Y, Yerr, label=point_eval.__name__, marker='^', capsize=5, ls='')
+
+    ax.set_xscale("log")
+    fig.legend()
+    ax.set_title(f'spearman correlation vs nb of data points \n {split_name}')
+    ax.set_xlabel('nb of training points')
+    ax.set_ylabel('spearman correlation')
+    fig.savefig(os.path.join(outdir, f'{split_name}_learning_curve_reg_ceof_{mtlp.REG_COEF_LIST}.png'))
+
+
+
+
+
 
 
 def learning_curve(dataset_name, train, test, point_eval, x, df):
@@ -137,6 +201,71 @@ def joint_pretrained_rosetta_onehot_single_data_point(dataset_name, train, test,
     return joint_predictor_dp(dataset_name, [mtlp.PretrainedFeature, mtlp.OnehotRidgePredictor],
                               train=train, test=test, df=kwargs['df'], feature='predictions_rosetta')
 
+def onehot_split_single_data_point(dataset_name,train,test,**kwargs):
+    splits=10
+    train=train.copy()
+    test=test.copy()
+    print(f'using {splits} splits')
+    print(f'train length {len(train)}')
+    rows=[]
+    rows_binary=[]
+    for i in tqdm(range(splits)):
+        start=i*10
+        end=start+10
+        print(f"start {start}, end {end}")
+        train_i=train[start:end].copy()
+        assert len(train_i)==10, 'this is optimized to work with 100 datapoints right now'
+        onehot = mtlp.OnehotRidgePredictor(dataset_name=dataset_name)
+        onehot.train(train_i.seq.values, train_i.log_fitness.values)
+        row=f'predicted_{i}'
+        row_binary=f"{row}_bin"
+        train[row]=onehot.predict(train.seq.values)
+        test[row]=onehot.predict(test.seq.values)
+
+
+        rows_binary.append(row_binary)
+        rows.append(row)
+
+    # try CV next before you give up .
+    threshold = -.75
+
+
+
+    ridge_top=Ridge(alpha=0)
+    ridge_top.fit(train[rows],train.log_fitness.values)
+    predicted_test=ridge_top.predict(test[rows])
+    ridge_top_B = Ridge(alpha=0)
+    ridge_top_B.fit(train[rows]>threshold, train.log_fitness.values)
+    predicted_test_b = ridge_top_B.predict(test[rows]>threshold)
+    plt.hist(predicted_test_b,label='test_predicted_b',alpha=0.4,bins=100)
+    plt.hist(predicted_test,label='test predicted',alpha=0.4,bins=100)
+    plt.hist(test.log_fitness.values,label='test actual',alpha=0.4,bins=100)
+    plt.title('test predicted vs actual')
+    plt.legend()
+    plt.show()
+
+
+
+    predicted_train=ridge_top.predict(train[rows])
+    predicted_train_b=ridge_top_B.predict(train[rows]>threshold)
+    plt.hist(predicted_train_b,label='train predicted b',alpha=0.4,bins=25)
+    plt.hist(predicted_train, label='train predicted', alpha=0.4,bins=25)
+    plt.hist(train.log_fitness.values, label='train actual', alpha=0.4,bins=25)
+    plt.title('train predicted vs actual')
+    plt.legend()
+    plt.show()
+
+
+
+
+    sp=mtlp.spearman(predicted_test, test.log_fitness.values)
+
+    print(f"spearman correlation for {len(train)} datapoints ,{splits} splits : {sp}")
+
+def unit_test_onehot_single_split():
+    dataset_name='gb1_double_single_40'
+    train, test, data =random_get_train_test(dataset_name)
+    onehot_split_single_data_point(dataset_name,train.sample(n=100),test)
 
 def unit_test_pretrained_model_data_point(dataset_name):
     path = os.path.join('models', f"gb1_pretrained_features.csv")
@@ -287,5 +416,7 @@ def parity_plot_filter_out_chloes_model():
     fig.savefig(os.path.join(outdir, f"filter_parity_plot_{len(df2_filtered)}_tot_seqs.png"))
 
 if __name__ == '__main__':
-    random_full_learning_curve('gb1_double_single_40')
+    # random_full_learning_curve('gb1_double_single_40')
 
+    # metl_make_learning_curve()
+    unit_test_onehot_single_split()

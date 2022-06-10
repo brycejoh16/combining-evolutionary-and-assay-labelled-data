@@ -226,6 +226,7 @@ class OnehotRidgePredictor(BaseRegressionPredictor):
         return seqs_to_onehot(seqs)
 def seqs_to_onehot(seqs):
     seqs = format_batch_seqs(seqs)
+    # key to get higher dimension:  seqs.shape[1]*24
     X = np.zeros((seqs.shape[0], seqs.shape[1]*24), dtype=int)
     for i in range(seqs.shape[1]):
         for j in range(24):
@@ -239,6 +240,7 @@ def format_batch_seqs(seqs):
     formatted = []
     for seq in seqs:
         pad_len = maxlen - len(seq)
+        # its one sequence longer b/c she's adding in a start value
         padded = np.pad(format_seq(seq), (0, pad_len), 'constant', constant_values=0)
         formatted.append(padded)
     return np.stack(formatted)
@@ -257,6 +259,8 @@ def format_seq(seq,stop=False):
     else:
         int_seq = aa_seq_to_int(seq.strip())[:-1]
     return int_seq
+
+
 
 def aa_seq_to_int(s):
     """
@@ -296,3 +300,5 @@ aa_to_int = {
     'stop':25,
     '-':26,
 }
+
+int_to_aa = {value:key for key, value in aa_to_int.items()}
