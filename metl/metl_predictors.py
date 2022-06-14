@@ -113,6 +113,11 @@ class BaseRegressionPredictor(BasePredictor):
             self.reg_coef = best_rc
             # print(f'Cross validated reg coef {best_rc}')
         self.model = self.linear_model_cls(alpha=self.reg_coef)
+
+        if self.reg_coef==0 :
+            print('using linear regrssion')
+            self.model=LinearRegression()
+
         self.model.fit(X, train_labels)
 
     def predict(self, predict_seqs):
@@ -121,6 +126,9 @@ class BaseRegressionPredictor(BasePredictor):
         # here it is on the test seq2feat again.
         X = self.seq2feat(predict_seqs)
         return self.model.predict(X)
+
+
+
 
 class PretrainedFeature(BaseRegressionPredictor):
     def __init__(self, dataset_name,df,feature, reg_coef=1, **kwargs):
@@ -167,6 +175,9 @@ class JointPredictor(BaseRegressionPredictor):
         features = [p.seq2feat(seqs) * np.sqrt(1.0 / p.reg_coef)
             for p in self.predictors]
         return np.concatenate(features, axis=1)
+
+    # def __repr__(self):
+    #     return f"{[p.__name__ for p in self.predictors]}_{self.reg_coef}"
 
 
 
@@ -224,12 +235,17 @@ class OnehotRidgePredictor(BaseRegressionPredictor):
 
     def seq2feat(self, seqs):
         return seqs_to_onehot(seqs)
+
+    def __repr__(self):
+        return f"onehot_reg_coef_{self.reg_coef:0.2f}"
+
 def seqs_to_onehot(seqs):
     seqs = format_batch_seqs(seqs)
     # key to get higher dimension:  seqs.shape[1]*24
     X = np.zeros((seqs.shape[0], seqs.shape[1]*24), dtype=int)
     for i in range(seqs.shape[1]):
         for j in range(24):
+
             X[:, i*24+j] = (seqs[:, i] == j)
     return X
 def format_batch_seqs(seqs):
@@ -266,9 +282,12 @@ def aa_seq_to_int(s):
     """
     Return the int sequence as a list for a given string of amino acids
     """
-    return [24] + [aa_to_int[a] for a in s] + [25]
+    return [0] + [aa_to_int[a] for a in s] + [25]
 
 # Lookup tables
+# edit bcj 6/14/22: this was incorrect , it missed AAs which had
+#    index >23 , so I made the gap character have value 0 instead of 24.
+
 aa_to_int = {
     'M':1,
     'R':2,
@@ -296,7 +315,7 @@ aa_to_int = {
     'Z':23, # Glutamic acid or GLutamine
     'B':23, # Asparagine or aspartic acid
     'J':23, # Leucine or isoleucine
-    'start':24,
+    'start':0,
     'stop':25,
     '-':26,
 }
