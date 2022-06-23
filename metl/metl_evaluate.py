@@ -201,6 +201,41 @@ def joint_pretrained_rosetta_onehot_single_data_point(dataset_name, train, test,
     return joint_predictor_dp(dataset_name, [mtlp.PretrainedFeature, mtlp.OnehotRidgePredictor],
                               train=train, test=test, df=kwargs['df'], feature='predictions_rosetta')
 
+def get_unsupervised(data):
+    path = 'gb1_unsupervised.tsv'
+    metl_data = pd.read_csv(path, sep='\t').set_index('variant')
+    data2=data.set_index('mutant').copy()
+    metl_data['seq']=data2['seq'].copy()
+    return metl_data.set_index('seq')
+def unit_test_rosetta_onehot_evmutation():
+    dataset_name = 'gb1_double_single_40'
+    train, test, data = random_get_train_test(dataset_name)
+    df=get_unsupervised(data)
+    for n in [48,96,142,196,250]:
+        out=joint_pretrained_rosetta_onehot_evmutation_single_data_point(dataset_name, train.sample(n=n), test,df=df)
+        print(f"spearman {out:0.3f} for n={n} datapoints")
+
+
+def joint_pretrained_rosetta_onehot_evmutation_single_data_point(dataset_name, train, test, **kwargs):
+    assert 'df' in kwargs.keys(), 'need to pass in df to use this function'
+    return joint_predictor_dp(dataset_name, [mtlp.PretrainedFeature, mtlp.PretrainedFeature,
+                                             mtlp.OnehotRidgePredictor],
+                              train=train, test=test, df=kwargs['df'], feature=['predictions_rosetta',
+                                                                                'gb1_double_single_40'])
+
+def playing_around_with_rosetta_and_evmutation():
+    dataset_name = 'gb1_double_single_40'
+    train, test, data = random_get_train_test(dataset_name)
+    df = get_unsupervised(data)
+    df.plot.scatter(x='predictions_rosetta',y='gb1_double_single_40',alpha=0.005)
+    plt.savefig(os.path.join('results','gb1','predictions_rosettaVgb1_double_single_40.png'))
+
+    df.plot.hist('predictions_rosetta',bins=1000,alpha=0.3)
+    plt.savefig(os.path.join('results', 'gb1', 'predictions_rosetta_hist.png'))
+
+    df.plot.hist('gb1_double_single_40',bins=1000,alpha=0.3)
+    plt.savefig(os.path.join('results', 'gb1', 'predictions_rosetta_hist.png'))
+
 def onehot_split_single_data_point(dataset_name,train,test,**kwargs):
     splits=10
     train=train.copy()
@@ -290,37 +325,76 @@ def pretrained_model_data_point(dataset_name, train, test, df, feature):
     predicted = predictor.predict(test.seq.values)
     return mtlp.spearman(predicted, test.log_fitness.values)
 
-
-def add_columns_unsupervised():
-    path = os.path.join('models', f"gb1_unsupervised.tsv")
-    metl_data = pd.read_csv(path, sep='\t').set_index('variant')
-    augmented_data = pd.read_csv(os.path.join('models', 'gb1_double_single_40_scores.csv')).set_index('mutant')
-    metl_data['evmutation_epistatis_MSA_40'] = augmented_data['pred']
-    metl_data['seq'] = augmented_data['seq']
-    assert metl_data['seq'].isna().sum() == 0 \
-           and len(metl_data['seq']) == len(augmented_data['seq'])
-
-    metl_data.to_csv(os.path.join('models', 'gb1_pretrained_features.csv'))
+# archiving this function its just silly. makes no sense.
+# def add_columns_unsupervised():
+#     path = os.path.join('models', f"gb1_unsupervised.tsv")
+#     metl_data = pd.read_csv(path, sep='\t').set_index('variant')
+#     augmented_data = pd.read_csv(os.path.join('models', 'gb1_double_single_40_scores.csv')).set_index('mutant')
+#     metl_data['evmutation_epistatis_MSA_40'] = augmented_data['pred']
+#     metl_data['seq'] = augmented_data['seq']
+#     assert metl_data['seq'].isna().sum() == 0 \
+#            and len(metl_data['seq']) == len(augmented_data['seq'])
+#
+#     metl_data.to_csv(os.path.join('models', 'gb1_pretrained_features.csv'))
 
     # augmented_data
+def parity_plot_ev_mutation():
+    path = 'gb1_unsupervised.tsv'
+    metl_data = pd.read_csv(path, sep='\t').set_index('variant')
+    fig,ax=plt.subplots(1,1)
+
+    metl_data=metl_data[~np.isnan(metl_data['predictions_evmutation_epistatic'])].copy()
+
+    ax=metl_data.plot.scatter(x='predictions_evmutation_epistatic',y='gb1_nn4dms',alpha=.005,ax=ax)
+    res_dir=os.path.join('results','gb1')
+    fig.savefig(os.path.join(res_dir,"gb1_nn4dmsVpredictions_evmutation_epistatic_filtered.png"))
+
+
+    print(f"spearman correlation evmutation to rosetta "
+          f"{mtlp.spearman(metl_data.gb1_double_single_40.values,metl_data.predictions_rosetta.values)}")
+
+
+    # for  i in metl_data.keys():
+    #     for j in metl_data.keys():
+    #         if i!=j:
+    #             temp=metl_data[[np.isnan(metl_data[i]) & np.isnan(metl_data[j])]].copy()
+
+
 
 
 def ev_predictor(dataset_name):
     # first thing we need to do is load the data
+    assert 'gb1' in dataset_name, 'this only works for gb1 right now, few edits and it will work for all'
+    path = 'gb1_unsupervised.tsv'
+    metl_data = pd.read_csv(path, sep='\t').set_index('variant')[:5000]
+
     filepath = os.path.join('..', 'data', dataset_name, 'data.csv')
-    data = pd.read_csv(filepath)
+    data = pd.read_csv(filepath).set_index('mutant')[:5000]
+
+    data=data.loc[['Q1W,V38Q']].copy()
+
+    # assert (data.index==metl_data.index).all(), 'these should be the same'
     ev = mtlp.EVPredictor(dataset_name)
-    # test = data.sample(frac=0.2, random_state=0)
-    # test = test.copy()
-    # train = data.drop(test.index)
+
+    print(f'running evmutation for {dataset_name}')
     predictions = ev.predict_unsupervised(data.seq.values)
-    data['pred'] = predictions
+    predictions[predictions==0]=np.nan
+    total_predicted_nans=np.isnan(predictions).sum()
+    print(f'{dataset_name} couldnt predict on {total_predicted_nans} values')
+
+    # data[dataset_name] = predictions
+    # metl_data[dataset_name]=data[dataset_name]
+    # metl_data.to_csv(path,sep='\t')
+    print('saving csv file ')
+
+
+
+
 
     # todo : make unit test here for where the allowed values are.
-    my_spearman = mtlp.spearman(data.pred.values, data.log_fitness.values)
+    # my_spearman = mtlp.spearman(data.dataset_name.values, data.log_fitness.values)
 
-    print(f'num data points {len(data)}, protein : {dataset_name}  , spearman: {my_spearman}')
-    return my_spearman, predictions
+    # print(f'num data points {len(data)}, protein : {dataset_name}  , spearman: {my_spearman}')
 
 
 def parity_plot_filter_out_chloes_model():
@@ -419,4 +493,11 @@ if __name__ == '__main__':
     # random_full_learning_curve('gb1_double_single_40')
 
     # metl_make_learning_curve()
-    unit_test_onehot_single_split()
+    # unit_test_onehot_single_split()
+    # ev_predictor('gb1_double_single_40')
+    # ev_predictor('gb1_double_single_30')
+    # ev_predictor('gb1_nn4dms')
+
+    # parity_plot_ev_mutation()
+    # unit_test_rosetta_onehot_evmutation()
+    playing_around_with_rosetta_and_evmutation()

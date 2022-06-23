@@ -3,7 +3,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import os
+import os,re
 
 def analyze_mavedb():
     filename=os.path.join('datasets','mavedb_top_performers.csv')
@@ -57,6 +57,67 @@ def analyze_protein_gym():
     fig1.savefig(os.path.join('datasets', 'protein_gym_colorbar.png'))
     fig.savefig(os.path.join('datasets', 'protein_gym_hist.png'))
 
+
+def im2html(url):
+    return '<img src="' + url + '" width="400" >'
+
+def save_figs(dms_ids,prefix,figure_function):
+    outdir=os.path.join('databases',prefix)
+    if not os.path.exists(outdir):
+        os.mkdir(f"{outdir}")
+    urls_html=[]
+    targetdir=os.path.join('databases','ProteinGym_substitutions')
+    for dms_id in dms_ids:
+        dms_filename=os.path.join(targetdir,f'{dms_id}.csv')
+        df=pd.read_csv(dms_filename)
+        fig,ax=plt.subplots(1,1,figsize=(6.4, 4))
+        ax=figure_function(df,ax)
+        im_filename=os.path.join(os.getcwd() ,outdir,f"{dms_id}.png")
+        fig.savefig(im_filename)
+        urls_html.append(im2html(im_filename))
+    return urls_html
+def histogram_func(df,ax):
+    ax=df['DMS_score'].hist(bins=100,alpha=0.3,ax=ax)
+    ax.set_xlabel('DMS_score')
+    return ax
+def mutant_func(df,ax):
+    df['nb_mutant']=df['mutant'].apply(lambda x : len(re.findall(r":",x))+1)
+    ax=df['nb_mutant'].hist(alpha=0.3,color='red',ax=ax)
+    ax.set_xlabel('nb_mutant')
+    return ax
+
+def parity_plot_func(df,ax):
+    df['nb_mutant'] = df['mutant'].apply(lambda x: len(re.findall(r":", x)) + 1)
+    ax=df.plot.scatter(x='DMS_score',y='nb_mutant',alpha=0.05,ax=ax,color='green')
+    return ax
+def all_values_increasing_order(df):
+    return df.sort_values(by=['DMS_total_number_mutants'])
+def only_doubles_and_above_increasing_order(df):
+    return df[df['includes_multiple_mutants']].sort_values(by=['DMS_total_number_mutants'])
+def table_compare_datasets(filter_name,filter_func=all_values_increasing_order):
+    ref_filename=os.path.join('databases','protein_gym_reference.csv')
+    df=pd.read_csv(ref_filename).set_index('DMS_id')
+    df=filter_func(df).copy()
+
+    funcs2include=[('histogram',histogram_func),
+                   ('mutant',mutant_func),
+                   ('parity_plot',parity_plot_func)]
+    for prefix, func2include in funcs2include:
+        df[prefix]=save_figs(df.index,prefix,func2include)
+
+    df['region_length'] = df['region_mutated'].apply(lambda x: abs(eval(x.replace('–', '-'))))
+    xcols=['molecule_name','region_length','region_mutated','seq_len','DMS_total_number_mutants',
+           'DMS_number_single_mutants', 'DMS_number_multiple_mutants',
+           'year','source_organism','selection_assay','selection_type',
+           'MSA_len','MSA_bitscore','MSA_num_seqs','taxon']
+
+    xcols=[f[0] for f in funcs2include]+ xcols
+    df=df[xcols].copy()
+    df.to_html(os.path.join('databases',f"{filter_name}.html"),escape=False)
+
 if __name__ == '__main__':
-    analyze_mavedb()
-    analyze_protein_gym()
+    # analyze_mavedb()
+    # analyze_protein_gym()
+
+    # table_compare_datasets('all_datasets_all_xcols')
+    table_compare_datasets('only_doubles_and_above_increasing',only_doubles_and_above_increasing_order)

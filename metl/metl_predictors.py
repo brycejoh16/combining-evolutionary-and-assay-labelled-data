@@ -30,6 +30,8 @@ def read_fasta(filename, return_ids=False):
 def seq2effect(seqs, model, offset=1, ignore_gaps=False):
     effects = np.zeros(len(seqs))
     for i in range(len(seqs)):
+        true_mutations=seq2mutation(seqs[i], model,
+                     ignore_gaps=False, offset=offset)
         mutations = seq2mutation(seqs[i], model,
                 ignore_gaps=ignore_gaps, offset=offset)
         dE, _, _ = model.delta_hamiltonian(mutations)
@@ -38,6 +40,11 @@ def seq2effect(seqs, model, offset=1, ignore_gaps=False):
 
 def seq2mutation(seq, model, return_str=False, ignore_gaps=False,
         sep=":", offset=1):
+    '''
+    function is responsible for returning mutations as a list of tuples,
+    it finds the index map of the alignment and that of the sequence. compares the sequences,
+    and if they are different adds to a list.
+    '''
     mutations = []
     for pf, pm in model.index_map.items():
         if seq[pf-offset] != model.target_seq[pm]:
@@ -131,9 +138,9 @@ class BaseRegressionPredictor(BasePredictor):
 
 
 class PretrainedFeature(BaseRegressionPredictor):
-    def __init__(self, dataset_name,df,feature, reg_coef=1, **kwargs):
+    def __init__(self, dataset_name,df,feature,idx, reg_coef=1, **kwargs):
         super().__init__(dataset_name, reg_coef, **kwargs)
-        self.feature_of_interest=df[feature]
+        self.feature_of_interest=df[feature[idx]]
         self.reg_coef=reg_coef
     def seq2feat(self, seqs):
         # filter based off what sequences are their and return.
@@ -166,7 +173,8 @@ class JointPredictor(BaseRegressionPredictor):
             # else:
             #     self.predictors.append(c(dataset_name, **kwargs))
 
-        for c in predictor_classes:
+        for i,c in enumerate(predictor_classes):
+            kwargs['idx']=i
             self.predictors.append(c(dataset_name,**kwargs))
 
     def seq2feat(self, seqs):
