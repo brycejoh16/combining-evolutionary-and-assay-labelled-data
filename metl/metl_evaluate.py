@@ -142,42 +142,58 @@ def random_full_learning_curve(dataset_name):
     if not os.path.exists(outdir):
         os.mkdir(f"{outdir}")
 
-    path = os.path.join('models', f"gb1_pretrained_features.csv")
-    df = pd.read_csv(path).set_index('seq')
 
-    funcs2include=[one_hot_single_data_point,joint_pretrained_ev_onehot_single_data_point,
+    func_names=['ridge+onehot','linear+onehot','rosetta+onehot+ev',
+                'ev+onehot','rosetta+onehot']
+
+    funcs2include=[one_hot_single_data_point, linear_model_onehot_single_data_point,
+                   joint_pretrained_rosetta_onehot_evmutation_single_data_point,
+                   joint_pretrained_ev_onehot_single_data_point,
                        joint_pretrained_rosetta_onehot_single_data_point]
-    # funcs2include = [one_hot_single_data_point]
-    train, test, data = random_get_train_test(dataset_name)
 
-    # df.loc[test.set_index('seq')]['evmutation_epistatis_MSA_40']
-    for unsup in ['predictions_rosetta', 'evmutation_epistatis_MSA_40']:
-        unsup_scores = df.loc[test.set_index('seq').index][unsup]
+    #
+
+
+    train, test, data = random_get_train_test(dataset_name)
+    melt_df = get_unsupervised(data)
+    fig,ax=plt.subplots(1,1)
+
+    # todo: this all kind of needs to be re-abstracted to allow for variable
+    #      -> protein of interest
+    #      -> variable unsupervised methods
+    #      -> variable supervised models
+
+    for i,unsup in enumerate(['predictions_rosetta', 'gb1_double_single_40']):
+        unsup_scores = melt_df.loc[test.set_index('seq').index][unsup]
         assert (unsup_scores.index == test.set_index('seq').index).all(), 'these indexes must be the same'
         spearman_unsup = mtlp.spearman(unsup_scores, test.log_fitness.values)
-        plt.axhline(spearman_unsup, label=unsup)
+        ax.axhline(spearman_unsup, label=['rosetta','ev'][i],color=['red','green'][i])
 
     x = np.arange(10, 210 + 50, 50)
     nb_of_seeds = 5
-    for point_eval in funcs2include:
+
+    df_spearman=pd.DataFrame(data=x,columns=['nb_training_points']).set_index('nb_training_points')
+    df_spearman['seeds']=np.ones((x.shape[0],1)).reshape(-1)*nb_of_seeds
+    for name,point_eval in zip(func_names,funcs2include):
         Y = []
         for _ in range(nb_of_seeds):
-            y = learning_curve(dataset_name, train, test, point_eval, x, df=df)
+            y = learning_curve(dataset_name, train, test, point_eval, x,df=melt_df)
             Y.append(y)
 
         yerr = np.array(Y).std(axis=0)
         y = np.array(Y).mean(axis=0)
-        plt.errorbar(x, y, yerr, label=point_eval.__name__,marker='^',capsize=5,ls='')
 
-    # ev = mtlp.EVPredictor(dataset_name)
-    # predictions = ev.predict_unsupervised(data.seq.values)
-    # plt.axhline(mtlp.spearman(predictions,data.log_fitness.values),label='ev_unsupervised')
-    plt.legend()
-    plt.title(f'spearman correlation vs nb of training points\n for {dataset_name}')
-    plt.xlabel('nb of training points')
-    plt.ylabel('spearman correlation')
-    plt.savefig(os.path.join(outdir, f'random_learning_curve_nb_seeds_{nb_of_seeds}_reg_ceof_{mtlp.REG_COEF_LIST}.png'))
+        df_spearman[f"{name}_mean"]=y
+        df_spearman[f"{name}_err"]=yerr
 
+        ax.errorbar(x, y, yerr, label=name,marker='^',capsize=5,ls='')
+
+    fig.legend(loc='lower right')
+    ax.set_title(f'spearman correlation vs nb of training points\n for {dataset_name}')
+    ax.set_xlabel('nb of training points')
+    ax.set_ylabel('spearman correlation')
+    fig.savefig(os.path.join(outdir, f'random_learning_curve_nb_seeds_{nb_of_seeds}.png'))
+    df_spearman.to_csv(os.path.join(outdir,'results.csv'))
 
 def one_hot_single_data_point(dataset_name, train, test, **kwargs):
     onehot = mtlp.OnehotRidgePredictor(dataset_name=dataset_name)
@@ -193,13 +209,14 @@ def joint_ev_onehot_single_data_point(dataset_name, train, test):
 def joint_pretrained_ev_onehot_single_data_point(dataset_name, train, test, **kwargs):
     assert 'df' in kwargs.keys(), 'need to pass in df to use this function'
     return joint_predictor_dp(dataset_name, [mtlp.PretrainedFeature, mtlp.OnehotRidgePredictor],
-                              train=train, test=test, df=kwargs['df'], feature='evmutation_epistatis_MSA_40')
+                              train=train, test=test, df=kwargs['df'], feature=['gb1_double_single_40'])
+
 
 
 def joint_pretrained_rosetta_onehot_single_data_point(dataset_name, train, test, **kwargs):
     assert 'df' in kwargs.keys(), 'need to pass in df to use this function'
     return joint_predictor_dp(dataset_name, [mtlp.PretrainedFeature, mtlp.OnehotRidgePredictor],
-                              train=train, test=test, df=kwargs['df'], feature='predictions_rosetta')
+                              train=train, test=test, df=kwargs['df'], feature=['predictions_rosetta'])
 
 def get_unsupervised(data):
     path = 'gb1_unsupervised.tsv'
@@ -235,6 +252,20 @@ def playing_around_with_rosetta_and_evmutation():
 
     df.plot.hist('gb1_double_single_40',bins=1000,alpha=0.3)
     plt.savefig(os.path.join('results', 'gb1', 'predictions_rosetta_hist.png'))
+def linear_model_onehot_single_data_point(dataset_name,train,test,**kwargs):
+    onehot = mtlp.OnehotRidgePredictor(dataset_name=dataset_name,reg_coef=0)
+    onehot.train(train.seq.values, train.log_fitness.values)
+    predicted = onehot.predict(test.seq.values)
+    return mtlp.spearman(predicted, test.log_fitness.values)
+
+def unit_test_linear_model_onehot_single_data_point():
+    dataset_name = 'gb1_double_single_40'
+    train, test, data = random_get_train_test(dataset_name)
+    spear= linear_model_onehot_single_data_point(dataset_name,
+                                                 train.sample(n=48),
+                                                 test)
+    print(f"spearman correlation: {spear}, linear model")
+
 
 def onehot_split_single_data_point(dataset_name,train,test,**kwargs):
     splits=10
@@ -490,7 +521,7 @@ def parity_plot_filter_out_chloes_model():
     fig.savefig(os.path.join(outdir, f"filter_parity_plot_{len(df2_filtered)}_tot_seqs.png"))
 
 if __name__ == '__main__':
-    # random_full_learning_curve('gb1_double_single_40')
+    random_full_learning_curve('gb1_double_single_40')
 
     # metl_make_learning_curve()
     # unit_test_onehot_single_split()
@@ -500,4 +531,5 @@ if __name__ == '__main__':
 
     # parity_plot_ev_mutation()
     # unit_test_rosetta_onehot_evmutation()
-    playing_around_with_rosetta_and_evmutation()
+    # playing_around_with_rosetta_and_evmutation()
+    # unit_test_linear_model_onehot_single_data_point()

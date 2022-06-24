@@ -118,6 +118,5 @@ def table_compare_datasets(filter_name,filter_func=all_values_increasing_order):
 if __name__ == '__main__':
     # analyze_mavedb()
     # analyze_protein_gym()
-
     # table_compare_datasets('all_datasets_all_xcols')
     table_compare_datasets('only_doubles_and_above_increasing',only_doubles_and_above_increasing_order)

@@ -95,6 +95,7 @@ class BasePredictor():
 class BaseRegressionPredictor(BasePredictor):
     def __init__(self, dataset_name, reg_coef=None, linear_model_cls=Ridge, **kwargs):
         # self.dataset_name = dataset_name
+        # print(linear_model_cls.__name__)
         self.reg_coef = reg_coef
         self.linear_model_cls = linear_model_cls
         self.model = None
@@ -119,12 +120,12 @@ class BaseRegressionPredictor(BasePredictor):
                     best_score = score
             self.reg_coef = best_rc
             # print(f'Cross validated reg coef {best_rc}')
-        self.model = self.linear_model_cls(alpha=self.reg_coef)
 
         if self.reg_coef==0 :
             print('using linear regrssion')
             self.model=LinearRegression()
-
+        else:
+            self.model = self.linear_model_cls(alpha=self.reg_coef)
         self.model.fit(X, train_labels)
 
     def predict(self, predict_seqs):
@@ -164,6 +165,7 @@ class JointPredictor(BaseRegressionPredictor):
         assert predictor_name is None , 'why are defining a predictor name'
         super(JointPredictor, self).__init__(dataset_name, reg_coef, **kwargs)
         self.predictors = []
+        assert reg_coef =='CV', 'you made this assumption'
         # commenting out b/c i'm not going to be specifying any specific regularization parameters for
         # any of these models. - BCJ - 5/17/22
         # for c, name in zip(predictor_classes, predictor_name):
