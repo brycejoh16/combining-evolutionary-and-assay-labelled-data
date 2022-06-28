@@ -195,6 +195,26 @@ def random_full_learning_curve(dataset_name):
     fig.savefig(os.path.join(outdir, f'random_learning_curve_nb_seeds_{nb_of_seeds}.png'))
     df_spearman.to_csv(os.path.join(outdir,'results.csv'))
 
+def eUniRep_reg_single_data_point(dataset_name,train,test,**kwargs):
+    eUniRep=mtlp.EUniRepRegressionPredictor(dataset_name)
+    eUniRep.train(train.seq.values, train.log_fitness.values)
+    predicted=eUniRep.predict(test.seq.values)
+    return mtlp.spearman(predicted,test.log_fitness.values)
+def eUniRep_LL_single_data_point(dataset_name,train,test,**kwargs):
+    eUniRepLL=mtlp.EUniRepLLPredictor(dataset_name)
+    eUniRepLL.train(train.seq.values,train.log_fitness.values)
+    predicted=eUniRepLL.predict(test.seq.values)
+    return mtlp.spearman(predicted,test.log_fitness.values)
+def unit_test_eUniRep_reg_single_data_point():
+    dataset='BLAT_ECOLX_Ranganathan2015-2500'
+    print(dataset)
+    train,test,data=random_get_train_test(dataset)
+    Nb=[48,  96, 144, 192, 240, 288]
+    for i in Nb:
+        sample=train.sample(n=i)
+        s=eUniRep_reg_single_data_point(dataset,sample,test)
+        s_ll=eUniRep_LL_single_data_point(dataset,sample,test)
+        print(f'nb : {i} spearman-reg {s:0.2f} spearman-ll {s_ll:0.2f}')
 def one_hot_single_data_point(dataset_name, train, test, **kwargs):
     onehot = mtlp.OnehotRidgePredictor(dataset_name=dataset_name)
     onehot.train(train.seq.values, train.log_fitness.values)
@@ -521,8 +541,8 @@ def parity_plot_filter_out_chloes_model():
     fig.savefig(os.path.join(outdir, f"filter_parity_plot_{len(df2_filtered)}_tot_seqs.png"))
 
 if __name__ == '__main__':
-    random_full_learning_curve('gb1_double_single_40')
-
+    # random_full_learning_curve('gb1_double_single_40')
+    unit_test_eUniRep_reg_single_data_point()
     # metl_make_learning_curve()
     # unit_test_onehot_single_split()
     # ev_predictor('gb1_double_single_40')
