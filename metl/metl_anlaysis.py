@@ -182,6 +182,26 @@ def individual_train_ridge_dataset_analysis(dataset_name='gb1_double_single_40',
 
     # hist_with_heatmaps(outdir,test,'test_actual_output')
 
+def analysis_predicting_most_popular_number():
+    pg_dir=os.path.join('databases','ProteinGym_substitutions')
+    dms_ids=['GFP_AEQVI_Sarkisyan_2016','HIS7_YEAST_Pokusaeva_2019','SPG1_STRSG_Olson_2014']
+
+    for dms_id in dms_ids:
+        df=pd.read_csv(os.path.join(pg_dir,f'{dms_id}.csv')).set_index('mutant')
+        counts=df['DMS_score'].value_counts(bins=100)
+        dms_score2predict=counts.index[0].mid
+        df['predicted']=np.ones((len(df['DMS_score']),1)).reshape(-1)*dms_score2predict
+        df['predicted_random_noise']=df['predicted'].apply(lambda x: x + np.random.normal(scale=.05))
+
+        spear=spearman(df['predicted'],df['DMS_score'])
+        print(f'spearman most frequent value( {dms_score2predict}  for dataset {dms_id}'
+              f'\n -----> {spear}')
+
+        spear=spearman(df['predicted_random_noise'],df['DMS_score'])
+        print(f'spearman most frequent value with guassian noise ( {dms_score2predict}  for dataset {dms_id}'
+              f'\n -----> {spear}')
+
+
 
 
 
@@ -207,6 +227,7 @@ def ridge_regression_analysis(dataset_name):
 
 if __name__ == '__main__':
     # ridge_regression_analysis('gb1_double_single_40')
-    individual_train_ridge_dataset_analysis(n=50)
-    individual_train_ridge_dataset_analysis(n=1000)
+    # individual_train_ridge_dataset_analysis(n=50)
+    # individual_train_ridge_dataset_analysis(n=1000)
+    analysis_predicting_most_popular_number()
 
