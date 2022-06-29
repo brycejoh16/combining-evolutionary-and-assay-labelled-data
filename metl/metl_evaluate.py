@@ -201,20 +201,25 @@ def eUniRep_reg_single_data_point(dataset_name,train,test,**kwargs):
     predicted=eUniRep.predict(test.seq.values)
     return mtlp.spearman(predicted,test.log_fitness.values)
 def eUniRep_LL_single_data_point(dataset_name,train,test,**kwargs):
+    #ohhh i see, it needs to be a joint predictor. Its always just predicting
+    # as if it was a
     eUniRepLL=mtlp.EUniRepLLPredictor(dataset_name)
     eUniRepLL.train(train.seq.values,train.log_fitness.values)
     predicted=eUniRepLL.predict(test.seq.values)
     return mtlp.spearman(predicted,test.log_fitness.values)
+
+
 def unit_test_eUniRep_reg_single_data_point():
     dataset='BLAT_ECOLX_Ranganathan2015-2500'
     print(dataset)
     train,test,data=random_get_train_test(dataset)
     Nb=[48,  96, 144, 192, 240, 288]
     for i in Nb:
-        sample=train.sample(n=i)
+        sample=train.sample(n=i,random_state=1)
         s=eUniRep_reg_single_data_point(dataset,sample,test)
         s_ll=eUniRep_LL_single_data_point(dataset,sample,test)
-        print(f'nb : {i} spearman-reg {s:0.2f} spearman-ll {s_ll:0.2f}')
+        s_ll_onehot=joint_eUniRep_LL_onehot_single_data_point(dataset,train,test)
+        print(f'nb : {i} spearman-reg {s:0.2f} spearman-ll {s_ll:0.2f} spearman-ll+onehot {s_ll_onehot:0.2f}')
 def one_hot_single_data_point(dataset_name, train, test, **kwargs):
     onehot = mtlp.OnehotRidgePredictor(dataset_name=dataset_name)
     onehot.train(train.seq.values, train.log_fitness.values)
@@ -231,8 +236,9 @@ def joint_pretrained_ev_onehot_single_data_point(dataset_name, train, test, **kw
     return joint_predictor_dp(dataset_name, [mtlp.PretrainedFeature, mtlp.OnehotRidgePredictor],
                               train=train, test=test, df=kwargs['df'], feature=['gb1_double_single_40'])
 
-
-
+def joint_eUniRep_LL_onehot_single_data_point(dataset_name,train,test,**kwargs):
+    return joint_predictor_dp(dataset_name,[mtlp.EUniRepLLPredictor,mtlp.OnehotRidgePredictor],train=train,
+                              test=test,**kwargs)
 def joint_pretrained_rosetta_onehot_single_data_point(dataset_name, train, test, **kwargs):
     assert 'df' in kwargs.keys(), 'need to pass in df to use this function'
     return joint_predictor_dp(dataset_name, [mtlp.PretrainedFeature, mtlp.OnehotRidgePredictor],
@@ -360,6 +366,7 @@ def unit_test_pretrained_model_data_point(dataset_name):
     spearman = pretrained_model_data_point(dataset_name, train, test, df, 'evmutation_epistatis_MSA_40')
     print(f'spearman for evmutation_epistatis_MSA_40 with {len(train)} training (random) is '
           f'{spearman}')
+
 
 
 def joint_predictor_dp(dataset_name, predictor_classes, train, test, **kwargs):
