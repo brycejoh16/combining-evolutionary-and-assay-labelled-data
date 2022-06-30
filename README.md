@@ -145,7 +145,7 @@ directly parsed by our correpsonding `ev` and `ev+onehot` predictors.
 
 ### DeepSequence VAE
 1. Install the [DeepSequence
-package](https://github.com/debbiemarkslab/DeepSequence.git).
+package](https://github.com/debbiemarkslab/DeepSequence.git). (Make sure to change to python 2.7 as instructed.) 
 2. Put the DeepSequence package directory as `WORKING_DIR` in both `src/train_vae.py`
 and `src/inference_vae.py`.
 3. Use `scripts/train_vae.sh` for training a VAE model from an MSA.
