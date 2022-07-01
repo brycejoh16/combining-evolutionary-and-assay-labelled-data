@@ -52,8 +52,12 @@ The list of software dependencies are provided in the `environment.yml` file.
 
 1. Create the conda environment from the environment.yml file:
 ```
-    conda env create -f environment.yml
+    conda env create -f my_environment.yml
 ```
+make sure that environment is backwards compatible for cudatoolkit as shown here, 
+it really depends on your system.
+conda-forge/conda-forge.github.io#687 (comment)
+
 
 2. Activate the new conda environment:
 ```
