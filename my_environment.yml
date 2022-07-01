@@ -6,7 +6,7 @@ channels:
   - defaults
 dependencies:
   - biopython=1.78
-  - cudatoolkit
+  - cudatoolkit=10.1
   - filelock=3.0.12
   - matplotlib-base=3.3.*
   - networkx=2.4
