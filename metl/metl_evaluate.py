@@ -218,7 +218,7 @@ def unit_test_eUniRep_reg_single_data_point():
         sample=train.sample(n=i,random_state=1)
         s=eUniRep_reg_single_data_point(dataset,sample,test)
         s_ll=eUniRep_LL_single_data_point(dataset,sample,test)
-        s_ll_onehot=joint_eUniRep_LL_onehot_single_data_point(dataset,train,test)
+        s_ll_onehot=joint_eUniRep_LL_onehot_single_data_point(dataset,sample,test)
         print(f'nb : {i} spearman-reg {s:0.2f} spearman-ll {s_ll:0.2f} spearman-ll+onehot {s_ll_onehot:0.2f}')
 def one_hot_single_data_point(dataset_name, train, test, **kwargs):
     onehot = mtlp.OnehotRidgePredictor(dataset_name=dataset_name)
