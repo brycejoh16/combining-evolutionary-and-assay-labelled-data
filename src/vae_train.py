@@ -9,15 +9,19 @@ import os
 import sys
 import time
 
-WORKING_DIR=""  # Put in the deepsequence directory
+WORKING_DIR="DeepSequence"  # Put in the deepsequence directory
 module_path = os.path.abspath(WORKING_DIR)
 if module_path not in sys.path:
         sys.path.append(module_path)
 
-from DeepSequence.model import VariationalAutoencoder
+import theano
 from DeepSequence import helper
+
+from DeepSequence.model import VariationalAutoencoder
+
 from DeepSequence import train
 
+print('done importing things!! ')
 model_params = {
     "bs"                :   100,
     "encode_dim_zero"   :   1500,
@@ -35,7 +39,7 @@ model_params = {
 }
 
 train_params = {
-    "num_updates"       :   300000,
+    "num_updates"       :  3,# 300000,
     "save_progress"     :   True,
     "verbose"           :   True,
     "save_parameters"   :   False,
