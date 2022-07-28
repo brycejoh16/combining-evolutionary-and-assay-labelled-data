@@ -204,6 +204,30 @@ def analysis_predicting_most_popular_number():
 
 
 
+def competing_landscape(files=['BLAT_ECOLX_Stiffler_2015','BLAT_ECOLX_Deng_2012']):
+
+    filename1=os.path.join('databases','ProteinGym_substitutions',f'{files[0]}.csv')
+    filename2=os.path.join('databases', 'ProteinGym_substitutions', f'{files[1]}.csv')
+
+    dataset1=pd.read_csv(filename1).set_index('mutant')
+    dataset2 = pd.read_csv(filename2).set_index('mutant')
+    set_dataset_2=set(dataset2.index)
+
+    isin=[i in set_dataset_2 for i in dataset1.index]
+    mystring=f'{sum(isin)} mutations are in each dataset'
+    mystring+=f'\n{len(dataset1)}:{files[0]} length, {len(dataset2)}:{files[1]} length'
+    myindex=dataset1.index[isin]
+
+    dms_score_dataset_1=dataset1['DMS_score'][myindex]
+    dms_score_dataset_2 = dataset2['DMS_score'][myindex]
+    mystring+=f"\n spearman : {spearman(dms_score_dataset_1,dms_score_dataset_2)}"
+    fig,ax=plt.subplots(1,1)
+    ax.scatter(dms_score_dataset_1,dms_score_dataset_2,s=0.2,c='g')
+    ax.set_xlabel(files[0])
+    ax.set_ylabel(files[1])
+    ax.set_title(mystring)
+    fig.savefig(os.path.join('databases','database_comparison',
+                             f"{files[0]}_vs_{files[1]}.png"))
 
 def ridge_regression_analysis(dataset_name):
     assert 'gb1' in dataset_name, 'this can only work for gb1 right now, b/c of wildtype in heatmap'
@@ -229,5 +253,6 @@ if __name__ == '__main__':
     # ridge_regression_analysis('gb1_double_single_40')
     # individual_train_ridge_dataset_analysis(n=50)
     # individual_train_ridge_dataset_analysis(n=1000)
-    analysis_predicting_most_popular_number()
+    # analysis_predicting_most_popular_number()
 
+    competing_landscape()

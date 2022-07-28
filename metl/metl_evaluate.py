@@ -117,7 +117,7 @@ def learning_curve(dataset_name, train, test, point_eval, x, df):
     for nb_train in x:
         print(f'nb_train {nb_train} , {point_eval.__name__}')
         spearman=point_eval(dataset_name, train.sample(n=nb_train), test, df=df)
-        y.append(spearman)
+        y.append(abs(spearman))
         print(f'spearman {spearman:0.2f}')
 
     print('leaving learning curve')
@@ -166,7 +166,7 @@ def random_full_learning_curve(dataset_name):
     for i,unsup in enumerate(['predictions_rosetta', 'gb1_double_single_40']):
         unsup_scores = melt_df.loc[test.set_index('seq').index][unsup]
         assert (unsup_scores.index == test.set_index('seq').index).all(), 'these indexes must be the same'
-        spearman_unsup = mtlp.spearman(unsup_scores, test.log_fitness.values)
+        spearman_unsup = abs(mtlp.spearman(unsup_scores, test.log_fitness.values))
         ax.axhline(spearman_unsup, label=['rosetta','ev'][i],color=['red','green'][i])
 
     x = np.arange(10, 210 + 50, 50)
@@ -548,7 +548,7 @@ def parity_plot_filter_out_chloes_model():
     fig.savefig(os.path.join(outdir, f"filter_parity_plot_{len(df2_filtered)}_tot_seqs.png"))
 
 if __name__ == '__main__':
-    # random_full_learning_curve('gb1_double_single_40')
+    random_full_learning_curve('gb1_double_single_40')
     unit_test_eUniRep_reg_single_data_point()
     # metl_make_learning_curve()
     # unit_test_onehot_single_split()
