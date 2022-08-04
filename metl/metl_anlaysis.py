@@ -333,20 +333,23 @@ def gb1_dataset_enrich2_vs_lnW():
     ax.set_title('number of data points in lnW with score \n'
                  'equal to -4.60517018598809\n'
                  f'=>number {len(lnW[lnW["DMS_score"]==-4.60517018598809])}')
-    plt.show()
-    new_mutants_with_offset=[]
+    # plt.show() #todo: need to show this here.
+    plt.savefig(os.path.join('databases','gb1_ambiguities','parity_plot_lnWvsenrich.png'))
+
+
+    # new_mutants_with_offset=[]
     # for mutant in lnW['mutant']:
     # #
     # lnW=lnW['mutant'].apply(lambda x: )
 
-def spearman_on_all(lnW):
+def spearman_on_all(lnW,scoring_func='DMS_score'):
     print(f'length of dataset {len(lnW)}')
     df=pd.DataFrame()
     for col in lnW.columns:
-        if col not in ['mutant', 'DMS_score', 'DMS_score_bin']:
-            score=spearman(lnW["DMS_score"], lnW[col])
+        if col not in ['mutant', 'DMS_score', 'DMS_score_bin','enrich2']:
+            score=spearman(lnW[scoring_func], lnW[col])
             print(f'{col}: {score:0.2f}')
-          #  df[col]=score
+            df[col]=[score]
         #todo : i need to go
     return df
 
@@ -358,21 +361,70 @@ def spearman_correlation_toy_around():
     spearman_same_number=spearman(np.array([-4.60517018598809]*len(lnW)),lnW['DMS_score'])
 
     print(f'spearman same number {spearman_same_number}')
-    print(f'filtering out two nan values')
+
+    nn4dms = os.path.join('..', 'data', 'gb1_double_single_40', 'data.csv')
+    enrich2 = pd.read_csv(nn4dms).set_index('mutant')
+
+    lnW['enrich2'] = enrich2['log_fitness']
+    print(f'filtering out {sum(np.isnan(lnW["enrich2"]))} sequences out of {len(lnW)} for enrich2 requirement')
+    lnW_enrich_nans=lnW[np.isnan(lnW['enrich2'])]
+
+    lnW = lnW[~np.isnan(lnW['enrich2'])]
+
+    print(f'filtering out {sum(np.isnan(lnW["EVE_single"]))} sequences out of {len(lnW)} for EVE requirement')
     lnW=lnW[~np.isnan(lnW['EVE_single'])]
     df1=spearman_on_all(lnW)
-    lnW=lnW[lnW["DMS_score"]!=-4.60517018598809]
+    df1['type']=['lnW']
     print('\n==========filter out all the values of same score =============')
-    df2=spearman_on_all(lnW)
-
-    df=pd.concat([df1,df2])
-    df.plot.bar()
-
-    plt.show()
-
-
+    print(f'found {sum(lnW["DMS_score"]==-4.60517018598809)} values with score -4.60517018598809')
+    df2=spearman_on_all(lnW[lnW["DMS_score"]!=-4.60517018598809])
+    df2['type']=['filter -4.6, lnW']
+    print('\n =================== enrich2 scores============================')
+    dfe1=spearman_on_all(lnW,'enrich2')
+    dfe1['type']=['enrich2_scores']
 
 
+    df=pd.concat([df1,df2,dfe1]).set_index('type').T.reset_index()
+
+    ax=df.plot.scatter(x='index',y='lnW',label='lnW',rot=90,alpha=0.5)
+    ax=df.plot.scatter(x='index',y='filter -4.6, lnW',label='enrich2 with ln!=-4.6 filter',ax=ax,rot=90,c='r',alpha=0.5)
+    ax=df.plot.scatter(x='index',y='enrich2_scores',label='enrich2',ax=ax,rot=90,c='g',alpha=0.5)
+    ax.set_ylabel('spearman')
+    ax.set_xlabel('model')
+    ax.grid(axis='x')
+    plt.tight_layout()
+    plt.legend()
+    plt.savefig(os.path.join('databases','gb1_ambiguities','spearman_different_datasets.png'))
+
+
+
+
+
+
+    #make histogram of missing scores!!!
+    ax=lnW_enrich_nans.hist(bins=20,column=['DMS_score'],alpha=0.3,color='b')
+    ax=ax[0][0]
+    ax.set_xlabel('lnW')
+    ax.set_ylabel('count')
+    ax.set_title('histogram of lnW for missing enrich scored values')
+    plt.savefig(os.path.join('databases','gb1_ambiguities','histogram_missing_enrich_values.png'))
+
+    lnW_46=lnW[lnW["DMS_score"] == -4.60517018598809]
+    ax = lnW_46.hist(bins=50, column=['enrich2'], alpha=0.3, color='r',label='enrich when lnW=-4.6')
+    ax = lnW.hist(bins=50,column=['enrich2'],alpha=0.3,color='g',ax=ax[0][0],label='enrich2_all_scores')
+    ax=ax[0]
+    ax.set_xlabel('scores')
+    ax.set_ylabel('count')
+    ax = lnW.hist(bins=50,column=['DMS_score'],alpha=0.3,color='b',ax=ax,label='lnW')
+    plt.legend()
+
+    plt.savefig(os.path.join('databases', 'gb1_ambiguities', 'histogram_enrich_scores_lnW_46.png'))
+
+
+    lnW.hist(bins=50,column=['Tranception_retrieval','EVE_ensemble','ESM1v_single','MSA_Transformer_ensemble',
+                             'DeepSequence','EVmutation','Ensemble_tranception_EVE'],alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join('databases', 'gb1_ambiguities', 'predicted_distributions.png'))
 
 def gb1_dataset_confusion():
     filename_gb1=os.path.join('databases','ProteinGym_substitutions','SPG1_STRSG_Olson_2014.csv')
@@ -430,3 +482,4 @@ if __name__ == '__main__':
 #     unit_test_get_mutation()
 #     gb1_dataset_enrich2_vs_lnW()
     spearman_correlation_toy_around()
+    gb1_dataset_enrich2_vs_lnW()
