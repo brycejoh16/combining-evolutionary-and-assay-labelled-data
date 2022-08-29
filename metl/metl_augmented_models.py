@@ -4,7 +4,7 @@ Gitter Lab ~ August 5th , 2022
 code augmented from https://github.com/chloechsu/combining-evolutionary-and-assay-labelled-data
 to implement augmented models from precomputed density features and manually define test and train splits
 '''
-
+import nn4dms_onehot as nn4dms
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import cross_val_score
@@ -218,37 +218,67 @@ def learning_curve(ag,train,test,nb_train,nb_simulations,density_features):
 
       df_spearman[density_col_name]=S
   return df_spearman
-def main():
-    dataset='SPG1_STRSG_Olson_2014'
-    beta_filename=os.path.join('databases','protein_gym_benchmark',f"{dataset}.csv")
-    df=pd.read_csv(beta_filename)
-    WT='MQYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGVDGEWTYDDATKTFTVTE'
-    ag=AugmentedModel(WT,offset=227,split_character=":",reg_coef=1)
-    # print(f"can keep {sum(~np.isnan(df['EVmutation']))} sequences out of {len(df)}")
-    #if following Tranception evaluation must remove all points EVmutation can't predict on for all datasets
-    df=df[~np.isnan(df['EVE_single'])]
-    frac=0.1
-    test = df.sample(frac=frac, random_state=1)  # so im hard coding my test state,
-    # but not my split on which points to sample from.
+
+def enrich2_evaluation():
+    dataset='SPG1_STRSG_Olson_2014_enrich2'
+    nn4dms_filename = os.path.join('..', 'data', 'gb1_double_single_40', 'data.csv')
+    df = pd.read_csv(nn4dms_filename)
+    df['DMS_score']=df['log_fitness']
+    WT = 'MQYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGVDGEWTYDDATKTFTVTE'
+    ag = AugmentedModel(WT, offset=0, split_character=",", reg_coef=1)
+
+    #### ------------ problem set up code -----------------------------;
+    frac = 0.1
+    test = df.sample(frac=frac, random_state=1)
     test = test.copy()
     train = df.drop(test.index)
+    nb_train = np.arange(1, 6, 1) * 48
+    nb_simulations = 1
 
+    df_spearman=learning_curve(ag,train,test,nb_train,nb_simulations,['onehot'])
 
-    ##### ==========problem set-up complete ========================
-
-    # make a learning curve for one density feature
-    df_spearman=pd.DataFrame()
-    nb_train=np.arange(1,6,1)*48
-    nb_simulations=1
-
-    ax=df_spearman.plot.line(marker='x')
+    ax = df_spearman.plot.line(marker='x')
     ax.set_xlabel('nb training points')
     ax.set_xticks(nb_train)
     ax.set_title(f'{dataset}\n'
                  f'{ag}')
     # ax.set_yticks([0,.25,.5,.75,1])
     plt.legend()
-    plt.savefig(os.path.join('results','learning_curves',f'{dataset}_frac_{frac}.png'))
+    plt.savefig(os.path.join('results', 'learning_curves', f'{dataset}_frac_{frac}_enrich2_scores_reg_coef_{ag.reg_coef}.png'))
+
+
+# def protein_gym():
+#     dataset = 'SPG1_STRSG_Olson_2014'
+#     beta_filename = os.path.join('databases', 'protein_gym_benchmark', f"{dataset}.csv")
+#     df = pd.read_csv(beta_filename)
+#     WT = 'MQYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGVDGEWTYDDATKTFTVTE'
+#     ag = AugmentedModel(WT, offset=227, split_character=":", reg_coef=1)
+#     # print(f"can keep {sum(~np.isnan(df['EVmutation']))} sequences out of {len(df)}")
+#     # if following Tranception evaluation must remove all points EVmutation can't predict on for all datasets
+#     df = df[~np.isnan(df['EVE_single'])]
+#     frac = 0.1
+#     test = df.sample(frac=frac, random_state=1)  # so im hard coding my test state,
+#     # but not my split on which points to sample from.
+#     test = test.copy()
+#     train = df.drop(test.index)
+#
+#     ##### ==========problem set-up complete ========================
+#
+#     # make a learning curve for one density feature
+#     nb_train = np.arange(1, 6, 1) * 48
+#     nb_simulations = 1
+#
+#     ax = df_spearman.plot.line(marker='x')
+#     ax.set_xlabel('nb training points')
+#     ax.set_xticks(nb_train)
+#     ax.set_title(f'{dataset}\n'
+#                  f'{ag}')
+#     # ax.set_yticks([0,.25,.5,.75,1])
+#     plt.legend()
+#     plt.savefig(os.path.join('results', 'learning_curves', f'{dataset}_frac_{frac}.png'))
+#
+#
+
 
 if __name__=='__main__':
-    main()
+    enrich2_evaluation()

@@ -57,6 +57,64 @@ def analyze_protein_gym():
     fig1.savefig(os.path.join('datasets', 'protein_gym_colorbar.png'))
     fig.savefig(os.path.join('datasets', 'protein_gym_hist.png'))
 
+def check_sub_file_protein_gym():
+    df=pd.read_csv(os.path.join('databases','reference.csv'))
+    for row in df.itertuples():
+        print(f"\n"+row.DMS_id)
+        df_temp=pd.read_csv(os.path.join('databases','protein_gym_benchmark',row.DMS_filename))
+        start,end=row.region_mutated.split('-')
+        start,end=int(start),int(end)
+
+        total_regoin=end-start+1 # add one since inclusive
+        reduced_WT=row.target_seq[start-1:end]
+        assert total_regoin>0 and total_regoin==len(reduced_WT), 'value should always be greater than zero'
+        mutant_count=[]
+        min=np.inf
+        max=-np.inf
+        lst_of_errors = []
+        for i,mutants in enumerate(df_temp['mutant']):
+            lst_mutants=mutants.split(':')
+            mutant_count.append(len(lst_mutants))
+
+            for mutant in lst_mutants:
+                WTaa,pos,Mutaa=mutant[0],mutant[1:-1],mutant[-1]
+                relative_pos=int(pos)-start
+                try:
+                    if WTaa != reduced_WT[relative_pos]:
+                        lst_of_errors.append(f'\nmutant {mutant} was found in list but didnt match to wildtype')
+                except Exception:
+                    pass
+                    # lst_of_errors.append(f'relative position {relative_pos} not within bounds')
+
+                if int(pos) < start or int(pos) >end:
+                    lst_of_errors.append(f'pos:{pos} less than start:{start} or greater than end:{end}')
+                if relative_pos > max :
+                    max=relative_pos
+
+                if relative_pos < min:
+                    min=relative_pos
+        if len(lst_of_errors)>0:
+            df_err=pd.DataFrame()
+            df_err['errors']=lst_of_errors
+            print(dict(df_err.value_counts()))
+
+        if min!=0 :
+            print(f'found min:{min+start}, expected: {start} error finding min for {row.DMS_id} ')
+        if max!=end-start:
+            print(f"found max:{max+start}, expected: {end} error finding the max for {row.DMS_id}")
+
+        mutant_count=np.array(mutant_count)
+        if (mutant_count==1).sum() != row.DMS_number_single_mutants:
+            print(f"\nfound off balance for single mutants in {row.DMS_id}")
+        if (mutant_count!=1).sum() != row.DMS_number_multiple_mutants:
+            print(f"\nfound off balance for double mutants+ in {row.DMS_id}")
+
+        if len(mutant_count)!= row.DMS_total_number_mutants :
+            print(f"number of found mutants not the same in {row.DMS_id}")
+
+
+
+
 
 def im2html(url):
     return '<img src="' + url + '" width="400" >'
@@ -119,4 +177,5 @@ if __name__ == '__main__':
     # analyze_mavedb()
     # analyze_protein_gym()
     # table_compare_datasets('all_datasets_all_xcols')
-    table_compare_datasets('only_doubles_and_above_increasing',only_doubles_and_above_increasing_order)
+    # table_compare_datasets('only_doubles_and_above_increasing',only_doubles_and_above_increasing_order)
+    check_sub_file_protein_gym()

@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
 from torch.autograd import Variable
+import math
 
 
 
@@ -59,24 +60,46 @@ class pytorch_linear_regression(torch.nn.Module):
         return out
 
 class helper_pytorch_linear:
-    def __init__(self,learning_rate,epochs):
+    def __init__(self,learning_rate,epochs,batch_size=None):
         self.learning_rate=learning_rate
         self.epochs=epochs
+        self.batch_size=batch_size
     def fit(self,X,y):
+        if self.batch_size is None:
+            self.batch_size=len(y)
         self.model = pytorch_linear_regression(X.shape[1], 1)
         criterion = torch.nn.MSELoss()
         # optimizer = torch.optim.SGD(self.model.parameters(), lr=self.learning_rate)
         self.optimizer=torch.optim.Adam(self.model.parameters(),lr=self.learning_rate)
         for epoch in range(self.epochs):
-            inputs =Variable(torch.from_numpy(X)).float()
-            labels = Variable(torch.from_numpy(y.reshape(-1,1))).float()
-            self.optimizer.zero_grad()
-            outputs = self.model(inputs)
-            loss = criterion(outputs, labels)
-            # print(loss)
-            # get gradients w.r.t to parameters
-            loss.backward()
-            self.optimizer.step()
+            n_batches=math.floor(len(y)/self.batch_size)
+            for i in range(n_batches):
+                batch_X=X[i*self.batch_size:(i+1)*self.batch_size]
+                batch_y=y[i*self.batch_size:(i+1)*self.batch_size]
+                assert len(batch_y)==self.batch_size,'batch_szie different from found length'
+                inputs =Variable(torch.from_numpy(batch_X)).float()
+                labels = Variable(torch.from_numpy(batch_y.reshape(-1,1))).float()
+                self.optimizer.zero_grad()
+                outputs = self.model(inputs)
+                loss = criterion(outputs, labels)
+                # print(loss)
+                # get gradients w.r.t to parameters
+                loss.backward()
+                self.optimizer.step()
+
+            if len(y)> (n_batches)*self.batch_size:
+                batch_X=X[(n_batches)*self.batch_size:]
+                batch_y=y[(n_batches)*self.batch_size:]
+                assert len(batch_y)< self.batch_size ,'batch of y should be less than batch size'
+                inputs = Variable(torch.from_numpy(batch_X)).float()
+                labels = Variable(torch.from_numpy(batch_y.reshape(-1, 1))).float()
+                self.optimizer.zero_grad()
+                outputs = self.model(inputs)
+                loss = criterion(outputs, labels)
+                # print(loss)
+                # get gradients w.r.t to parameters
+                loss.backward()
+                self.optimizer.step()
 
     def predict(self,X):
         return self.model(torch.from_numpy(X)).data.numpy()
@@ -220,24 +243,36 @@ def nn4dms_evaluation():
     plt.legend()
     plt.savefig(
         os.path.join('results', 'learning_curves', f'{dataset}_frac_{frac}_reg_coef_{ag.reg_coef}_pearson.png'))
+def show_multiple_models_plot():
+    df_spearman=pd.read_csv(os.path.join('results', 'learning_curves', f'nn4dms_reduced3_splits_multiple_models_prodcution_run.csv'))
+    df_spearman=df_spearman.set_index('nb_train')
+    ax = df_spearman.plot.line(marker='x')
+    ax.set_xlabel('nb training points')
+    ax.set_xscale('log')
+    plt.legend()
+    plt.savefig(
+        os.path.join('results', 'learning_curves', f'nn4dms_reduced3_multiple_models_Aug17.png'))
+
 def multiple_models_reduced3_splits_analysis():
     dataset = 'nn4dms_reduced3_splits_gb1'
     df, all_splits = load_splits()
     df_ros = pd.read_csv('gb1_unsupervised.tsv', sep='\t').set_index('variant')
     df = df.set_index('variant')
     df['rosetta'] = df_ros['predictions_rosetta']
-    df['log_rosetta'] = np.log(df['rosetta'] + abs(df['rosetta'].min()) + .1)
+    # df['log_rosetta'] = np.log(df['rosetta'] + abs(df['rosetta'].min()) + .1)
+    # Z= np.sum(np.exp(-df['rosetta']))
+    # df['exp_rosetta'] = np.exp(-df['rosetta'])/Z
     df = df.reset_index()
     wt_seq = "MQYKLILNGKTLKGETTTEAVDAATAEKVFKQYANDNGVDGEWTYDDATKTFTVTE"
     density_feature = 'log_rosetta'
     # model=helper_pytorch_linear(learning_rate=0.0001,epochs=500)
     models={'rosetta':(Ridge(alpha=1),'rosetta'),
-            'onehot_ridge':(Ridge(alpha=1),None),
-            'pytorch_onehot_lr1e-4':(helper_pytorch_linear(learning_rate=0.0001,epochs=500),None),
-            'onehot_Ridge(alpha=0)':(Ridge(alpha=0),None),
-            'onehot_Linear_Regression':(LinearRegression(),None) }
-
-    N=[]
+            'exp_rosetta':(Ridge(alpha=1),'exp_rosetta')}
+    #         'onehot_ridge':(Ridge(alpha=1),None),
+    #         'pytorch_onehot_lr1e-4':(helper_pytorch_linear(learning_rate=0.0001,epochs=500),None),
+    #         'onehot_Ridge(alpha=0)':(Ridge(alpha=0),None),
+    #         'onehot_Linear_Regression':(LinearRegression(),None),
+    models={  'pytorch_onehot_1r1e-4_batch_size_128':(helper_pytorch_linear(learning_rate=1e-4,epochs=500,batch_size=128),None)}
     for train_size, splits in all_splits.items():
         print(f"Train size: {train_size:>5} Replicates: {len(splits)}")
 
@@ -250,13 +285,13 @@ def multiple_models_reduced3_splits_analysis():
 
     df_spearman['nb_train']=N
     df_spearman=df_spearman.set_index('nb_train')
-    df_spearman.to_csv(os.path.join('results', 'learning_curves', f'nn4dms_reduced3_splits_multiple_models_prodcution_run.csv'))
-    ax = df_spearman.plot.line(marker='x')
-    ax.set_xlabel('nb training points')
-    ax.set_xscale('log')
-    plt.legend()
-    plt.savefig(
-        os.path.join('results', 'learning_curves', f'nn4dms_reduced3_splits_multiple_models.png'))
+    df_spearman.to_csv(os.path.join('results', 'learning_curves', f'nn4dms_reduced3_splits_multiple_models_prodcution_run.csv'),mode='a')
+    # ax = df_spearman.plot.line(marker='x')
+    # ax.set_xlabel('nb training points')
+    # ax.set_xscale('log')
+    # plt.legend()
+    # plt.savefig(
+    #     os.path.join('results', 'learning_curves', f'nn4dms_reduced3_rosetta_exp.png'))
 def nn4dms_evaluation_reduced3_splits(dataset,all_splits,df,wt_seq,model,density_feature):
 
     S,P,N=[],[],[]
@@ -419,4 +454,5 @@ if __name__ == '__main__':
     # unit_load_splits()
     # nn4dms_evaluation_reduced3_splits()
     # unit_test_linear_regression()
-    multiple_models_reduced3_splits_analysis()
+    # multiple_models_reduced3_splits_analysis()
+    show_multiple_models_plot()

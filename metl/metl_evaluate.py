@@ -137,25 +137,57 @@ def random_get_train_test(dataset_name, frac=0.2,random_state=0):
     return train, test, data
 
 
+def get_decoupled_mutants(mutants ,offset=0 ,split_character=':'):
+    ans =[]
+    for mutant in mutants.split(split_character):
+        idx =int(mutant[1:-1]) - offset
+        assert idx >= 0 ,'why is offset greater than the mutation position?'
+        ans.append((str(mutant[0]), idx, str(mutant[-1])))
+    return ans
+
+def mutant2sequence(mutant,WT,offset, split_character=':'):
+    # todo: check this works for multiple sequences
+    decouple_mutants=get_decoupled_mutants(mutant,offset,split_character)
+    new_seq=WT
+    for dc_mutant in decouple_mutants:
+        original,idx,new=dc_mutant[0],dc_mutant[1],dc_mutant[2]
+        assert new_seq[idx]==original, f'original mutant ({original}) at index {idx} not the same as that in wildtype'
+        temp = list(new_seq)
+        temp[idx] = new
+        new_seq = "".join(temp)
+    return new_seq
+
 def random_full_learning_curve(dataset_name):
     outdir = os.path.join('results', dataset_name)
     if not os.path.exists(outdir):
         os.mkdir(f"{outdir}")
 
 
-    func_names=['ridge+onehot','linear+onehot','rosetta+onehot+ev',
-                'ev+onehot','rosetta+onehot']
+    # func_names=['ridge+onehot','linear+onehot','rosetta+onehot+ev',
+    #             'ev+onehot','rosetta+onehot']
 
-    funcs2include=[one_hot_single_data_point, linear_model_onehot_single_data_point,
-                   joint_pretrained_rosetta_onehot_evmutation_single_data_point,
-                   joint_pretrained_ev_onehot_single_data_point,
-                       joint_pretrained_rosetta_onehot_single_data_point]
+    # funcs2include=[one_hot_single_data_point, linear_model_onehot_single_data_point,
+    #                joint_pretrained_rosetta_onehot_evmutation_single_data_point,
+    #                joint_pretrained_ev_onehot_single_data_point,
+    #                    joint_pretrained_rosetta_onehot_single_data_point]
+    func_names=['onehot','ev+onehot (tranception)','deep+onehot']
+    funcs2include=[one_hot_single_data_point,joint_pretrained_ev_onehot_single_data_point,
+                   joint_pretrained_deep_sequence_onehot_single_data_point]
 
-    #
-
-
-    train, test, data = random_get_train_test(dataset_name)
-    melt_df = get_unsupervised(data)
+    beta_filename = os.path.join('databases', 'protein_gym_benchmark', 'BLAT_ECOLX_Stiffler_2015.csv')
+    data = pd.read_csv(beta_filename)
+    WT='HPETLVKVKDAEDQLGARVGYIELDLNSGKILESFRPEERFPMMSTFKVLLCGAVLSRVDAGQEQLGRRIHYSQNDLVEYSPVTEKHLTDGMTVRELCSAAITMSDNTAANLLLTTIGGPKELTAFLHNMGDHVTRLDRWEPELNEAIPNDERDTTMPAAMATTLRKLLTGELLTLASRQQLIDWMEADKVAGPLLRSALPAGWFIADKSGAGERGSRGIIAALGPDGKPSRIVVIYTTGSQATMDERNRQIAEIGASLIKHW'
+    data['seq'] = data['mutant'].apply(
+        lambda x: mutant2sequence(x, WT=WT, offset=24, split_character=":"))
+    data['log_fitness']=data['DMS_score'].copy()
+    data=data[~np.isnan(data['EVmutation'])]
+    test = data.sample(frac=0.2, random_state=0)
+    test = test.copy()
+    train = data.drop(test.index)
+    assert len(train) > len(test)
+    print(f'train length  {len(train)}, ')
+    # melt_df = get_unsupervised(data)
+    melt_df=data.set_index('seq')
     fig,ax=plt.subplots(1,1)
 
     # todo: this all kind of needs to be re-abstracted to allow for variable
@@ -163,13 +195,13 @@ def random_full_learning_curve(dataset_name):
     #      -> variable unsupervised methods
     #      -> variable supervised models
 
-    for i,unsup in enumerate(['predictions_rosetta', 'gb1_double_single_40']):
-        unsup_scores = melt_df.loc[test.set_index('seq').index][unsup]
-        assert (unsup_scores.index == test.set_index('seq').index).all(), 'these indexes must be the same'
-        spearman_unsup = abs(mtlp.spearman(unsup_scores, test.log_fitness.values))
-        ax.axhline(spearman_unsup, label=['rosetta','ev'][i],color=['red','green'][i])
+    # for i,unsup in enumerate(['predictions_rosetta', 'gb1_double_single_40']):
+    #     unsup_scores = melt_df.loc[test.set_index('seq').index][unsup]
+    #     assert (unsup_scores.index == test.set_index('seq').index).all(), 'these indexes must be the same'
+    #     spearman_unsup = abs(mtlp.spearman(unsup_scores, test.log_fitness.values))
+    #     ax.axhline(spearman_unsup, label=['rosetta','ev'][i],color=['red','green'][i])
 
-    x = np.arange(10, 210 + 50, 50)
+    x = np.arange(1,6,1)*48
     nb_of_seeds = 5
 
     df_spearman=pd.DataFrame(data=x,columns=['nb_training_points']).set_index('nb_training_points')
@@ -231,10 +263,20 @@ def joint_ev_onehot_single_data_point(dataset_name, train, test):
     return joint_predictor_dp(dataset_name, [mtlp.EVPredictor, mtlp.OnehotRidgePredictor], train, test)
 
 
+# def joint_pretrained_ev_onehot_single_data_point(dataset_name, train, test, **kwargs):
+#     assert 'df' in kwargs.keys(), 'need to pass in df to use this function'
+#     return joint_predictor_dp(dataset_name, [mtlp.PretrainedFeature, mtlp.OnehotRidgePredictor],
+#                               train=train, test=test, df=kwargs['df'], feature=['gb1_double_single_40'])
+
+
 def joint_pretrained_ev_onehot_single_data_point(dataset_name, train, test, **kwargs):
     assert 'df' in kwargs.keys(), 'need to pass in df to use this function'
     return joint_predictor_dp(dataset_name, [mtlp.PretrainedFeature, mtlp.OnehotRidgePredictor],
-                              train=train, test=test, df=kwargs['df'], feature=['gb1_double_single_40'])
+                              train=train, test=test, df=kwargs['df'], feature=['EVmutation'])
+def joint_pretrained_deep_sequence_onehot_single_data_point(dataset_name, train, test, **kwargs):
+    assert 'df' in kwargs.keys(), 'need to pass in df to use this function'
+    return joint_predictor_dp(dataset_name, [mtlp.PretrainedFeature, mtlp.OnehotRidgePredictor],
+                              train=train, test=test, df=kwargs['df'], feature=['DeepSequence'])
 
 def joint_eUniRep_LL_onehot_single_data_point(dataset_name,train,test,**kwargs):
     return joint_predictor_dp(dataset_name,[mtlp.EUniRepLLPredictor,mtlp.OnehotRidgePredictor],train=train,
@@ -548,7 +590,8 @@ def parity_plot_filter_out_chloes_model():
     fig.savefig(os.path.join(outdir, f"filter_parity_plot_{len(df2_filtered)}_tot_seqs.png"))
 
 if __name__ == '__main__':
-    random_full_learning_curve('gb1_double_single_40')
+    # random_full_learning_curve('TEM1-beta-lactamase')
+    # unit_test_eUniRep_reg_single_data_point()
     unit_test_eUniRep_reg_single_data_point()
     # metl_make_learning_curve()
     # unit_test_onehot_single_split()
