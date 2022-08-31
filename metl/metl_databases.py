@@ -172,10 +172,38 @@ def table_compare_datasets(filter_name,filter_func=all_values_increasing_order):
     xcols=[f[0] for f in funcs2include]+ xcols
     df=df[xcols].copy()
     df.to_html(os.path.join('databases',f"{filter_name}.html"),escape=False)
+def experimental_datasets_sars():
+    filename=os.path.join('databases','experimental','SPIKE_SARS2_Starr_bind_2020_doubles')
+    df=pd.read_csv(f"{filename}.csv")
+    # remove 'NA'
+    print(f'original length of sequences : {len(df)}')
+    df=df[~np.isnan(df['score'])]
+    assert np.isnan(df['score']).sum()==0
+    print(f"after removing NA's :{len(df)}")
+    df_new=df.groupby(['hgvs_pro'],as_index=False).mean()
+
+    assert len(df_new['hgvs_pro'].unique())==len(df_new)
+
+    df_new['nb_mutations']=df_new['hgvs_pro'].apply(lambda  x: len(x.split(";")))
+    print(f"only looking at unique mutations: {len(df_new)}")
+
+    ax=df_new.hist(column=['nb_mutations'],color='r',alpha=0.3)
+    plt.savefig(f"{filename}_hist_nb_mutations.png")
+
+    df_new.hist(column=['score'],bins=50,color='b',alpha=0.3)
+    plt.savefig(f"{filename}_hist_score.png")
+
+    df_new.plot.scatter(x='score',y='nb_mutations',color='g',alpha=0.2)
+    plt.savefig(f"{filename}_parity_plot.png")
+
+    print(f'number of double mutants: {(df_new["nb_mutations"]>1).sum()}')
+
+    # do a group by for mutants, take the mean of the score
 
 if __name__ == '__main__':
     # analyze_mavedb()
     # analyze_protein_gym()
     # table_compare_datasets('all_datasets_all_xcols')
     # table_compare_datasets('only_doubles_and_above_increasing',only_doubles_and_above_increasing_order)
-    check_sub_file_protein_gym()
+    # check_sub_file_protein_gym()
+    experimental_datasets_sars()
